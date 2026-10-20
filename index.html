@@ -32,11 +32,28 @@ canvas{display:block}
 #bar i{display:block;height:100%;width:0;background:#8fe3ff;transition:width .2s}
 #snap{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
 #credit{position:absolute;left:28px;bottom:20px;font-size:11px;opacity:.45}
+#bars{position:absolute;left:28px;bottom:56px;width:220px;font-family:"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.12em}
+#bars div{margin-top:8px}
+#bars i{display:block;height:5px;margin-top:4px;background:rgba(255,255,255,.12)}
+#bars b{display:block;height:100%;width:100%}
+#shieldBar b{background:#7fdcff}
+#armorBar b{background:#e8c46a}
+#armorBar.low b{background:#ff5a3c}
+#hurt{position:absolute;inset:0;background:radial-gradient(ellipse 70% 65% at 50% 50%,transparent 55%,rgba(255,40,20,.55) 100%);opacity:0}
+#notice{position:absolute;left:50%;top:calc(50% + 46px);transform:translateX(-50%);padding:5px 12px;background:rgba(5,20,30,.55);font:600 14px "SF Mono",Menlo,monospace;letter-spacing:.3em;opacity:0;transition:opacity .3s}
+#alert{position:absolute;left:50%;top:18%;transform:translateX(-50%);font:600 22px "SF Mono",Menlo,monospace;letter-spacing:.3em;color:#ff5a3c;display:none}
 </style>
 </head>
 <body>
 <div id="hud">
   <div id="visor"></div>
+  <div id="hurt"></div>
+  <div id="alert"></div>
+  <div id="notice"></div>
+  <div id="bars">
+    <div>SHIELD<i id="shieldBar"><b></b></i></div>
+    <div>ARMOR<i id="armorBar"><b></b></i></div>
+  </div>
   <div id="cross"></div>
   <div id="locks"></div>
   <div id="stats">
@@ -76,7 +93,7 @@ canvas{display:block}
   <small id="startSub"></small>
 </div>
 
-<script>window.ASSET_SIZES = {"assets/mk85.glb": 3705580, "assets/env.glb": 4371492, "assets/tank.glb": 871028, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651};</script>
+<script>window.ASSET_SIZES = {"assets/mk85.glb": 3705580, "assets/env.glb": 5272536, "assets/tank.glb": 871028, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651, "assets/sfx.pack": 697173};</script>
 <script type="importmap">
 {"imports":{
   "three":"./vendor/three/build/three.module.js",
@@ -136,6 +153,7 @@ const ASSETS = {
   tank: ['TANK_GLB_B64', 'assets/tank.glb'],
   sky: ['SKY_JPG_B64', 'assets/sky_4k.jpg'],
   hdr: ['SKY_HDR_B64', 'assets/sky_1k.hdr'],
+  sfx: ['SFX_PACK_B64', 'assets/sfx.pack'],
 };
 const loaded = {}, sizes = {};
 const barEl = document.querySelector('#bar i'), startMsgEl = document.getElementById('startMsg');
@@ -166,6 +184,8 @@ async function download(key, url) {
 }
 const assetBuf = {};
 for (const [key, [global, url]] of Object.entries(ASSETS)) {
+  // 发布版一开始就知道所有文件大小，进度的总量不会随着文件陆续开始下载而变大
+  if (!window[global] && window.ASSET_SIZES?.[url]) sizes[key] = window.ASSET_SIZES[url];
   assetBuf[key] = (window[global]
     ? fetch('data:application/octet-stream;base64,' + window[global]).then(r => r.arrayBuffer())
     : download(key, url)
@@ -235,11 +255,21 @@ function terrainH(x, z) {
   const n = 0.5 * Math.sin(x * 0.011 + 1.3) * Math.cos(z * 0.009 - 0.7)
     + 0.3 * Math.sin(x * 0.027 - z * 0.021 + 2.1)
     + 0.2 * Math.sin(x * 0.061 + z * 0.047);
-  const ridge = 1 - Math.abs(Math.sin(x * 0.004 + z * 0.003 + n));
-  return m * (18 + 75 * ridge + 22 * n);
+  const n2 = 0.35 * Math.sin(x * 0.0173 + z * 0.0291 + 0.4) * Math.sin(z * 0.0119 - x * 0.0071 + 1.9)
+    + 0.06 * Math.sin(x * 0.093 - z * 0.071 + 0.8) * Math.cos(x * 0.041 + z * 0.113);
+  const ridge = 1 - Math.abs(Math.sin(x * 0.004 + z * 0.003 + n + 0.6 * n2));
+  return m * (18 + 75 * ridge + 22 * n + 18 * n2);
 }
 
 const rayMeshes = [], camBlockers = [];
+// 地形有沙地、岩石两种材质，加载后会拆成 terrain 底下的两个子网格
+const isTerrain = o => o.name === 'terrain' || o.parent?.name === 'terrain';
+// 植物（名字带 plant_）：不挡人、不挡子弹、不挡镜头
+const isPlant = o => /^plant_/.test(o.name) || /^plant_/.test(o.parent?.name || '');
+// 离点 p 不超过 extra 米的遮挡物（射线检测前先粗筛，远处的大山崖不参与）
+function nearBlockers(p, extra) {
+  return camBlockers.filter(o => o.userData.ws.center.distanceTo(p) < o.userData.ws.radius + extra);
+}
 let ground = null;
 const envBuf = await assetBuf.env;
 if (envBuf) {
@@ -247,17 +277,42 @@ if (envBuf) {
   env.traverse(o => {
     if (!o.isMesh) return;
     o.receiveShadow = true;
-    o.castShadow = o.name !== 'terrain';
+    o.castShadow = !isTerrain(o);
+    if (isPlant(o)) {
+      // 树叶用镂空贴图（不用半透明），避免一堆叶子互相遮挡错乱
+      for (const m of [].concat(o.material)) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; m.depthWrite = true; }
+      return;
+    }
     rayMeshes.push(o);
     for (const m of [].concat(o.material)) {
       if (m.map) m.map.anisotropy = 8;
-      // aerial_beach 是偏白的海滩沙，染成全景照片里的橙黄沙地
-      if (m.name === 'sand') m.color.setRGB(1.0, 0.78, 0.55);
+      // aerial_beach 是偏白的海滩沙，染成全景照片里的橙黄沙地；
+      // 再把贴图按两种比例混合、叠一层大范围明暗，远看不出一格格重复
+      if (m.name === 'sand') {
+        m.color.setRGB(1.0, 0.78, 0.55);
+        m.onBeforeCompile = sh => {
+          sh.fragmentShader = sh.fragmentShader.replace('#include <map_fragment>', `
+            #ifdef USE_MAP
+              vec4 s1 = texture2D(map, vMapUv);
+              vec4 s2 = texture2D(map, vMapUv * 0.37 + vec2(0.31, 0.17));
+              float macro = texture2D(map, vMapUv * 0.043 + vec2(0.5, 0.2)).g;
+              vec4 sampledDiffuseColor = mix(s1, s2, 0.5);
+              sampledDiffuseColor.rgb *= 0.8 + 0.4 * macro;
+              diffuseColor *= sampledDiffuseColor;
+            #endif`);
+        };
+      }
     }
   });
   scene.add(env);
   // 挡镜头的物体：房子、石头、山崖（地形单独按高度处理）
-  camBlockers.push(...rayMeshes.filter(o => o.name !== 'terrain'));
+  camBlockers.push(...rayMeshes.filter(o => !isTerrain(o)));
+  // 这些物体都不动：先算好世界坐标的包围球，检测时只挑附近的
+  env.updateMatrixWorld(true);
+  for (const o of camBlockers) {
+    o.geometry.computeBoundingSphere();
+    o.userData.ws = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+  }
 } else {
   ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0xc4a06c, roughness: 0.95 }));
   ground.rotation.x = -Math.PI / 2;
@@ -301,7 +356,7 @@ const tanks = TANK_POS.map(([x, z], i) => {
   g.rotation.y = i * 1.3;
   scene.add(g);
   const t = { g, turret, hp: 3, alive: true, respawn: 0, phase: i * 1.7 };
-  g.userData.tank = t;
+  g.userData.target = t;
   return t;
 });
 
@@ -555,6 +610,50 @@ function emit(p, v, life, size, kind) {
   pDirty = true;
 }
 
+// 黑烟：另一套粒子，用普通混合（上面那套是叠加发光，压不暗画面）
+const SMAX = 1500;
+const sPos = new Float32Array(SMAX * 3), sVel = new Float32Array(SMAX * 3), sInfo = new Float32Array(SMAX * 3);
+for (let i = 0; i < SMAX; i++) { sInfo[i * 3] = -99; sInfo[i * 3 + 1] = 1; }
+const sGeo = new THREE.BufferGeometry();
+sGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3).setUsage(THREE.DynamicDrawUsage));
+sGeo.setAttribute('aVel', new THREE.BufferAttribute(sVel, 3).setUsage(THREE.DynamicDrawUsage));
+sGeo.setAttribute('aInfo', new THREE.BufferAttribute(sInfo, 3).setUsage(THREE.DynamicDrawUsage));
+const sMat = new THREE.ShaderMaterial({
+  uniforms: pMat.uniforms,
+  transparent: true, depthWrite: false,
+  vertexShader: `attribute vec3 aVel; attribute vec3 aInfo;
+    uniform float uTime, uScale; varying float vT;
+    void main(){
+      float age = uTime - aInfo.x, t = age / aInfo.y;
+      vT = t;
+      if (t < 0.0 || t > 1.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+      // 往上飘，被风吹向一边
+      vec3 p = position + aVel * (1.0 - exp(-1.2 * age)) / 1.2 + vec3(0.7 * age, 1.1 * age, 0.3 * age);
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = aInfo.z * (1.0 + 3.5 * t) * uScale / -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: `varying float vT;
+    void main(){
+      float d = length(gl_PointCoord - 0.5) * 2.0;
+      if (d > 1.0) discard;
+      float a = pow(1.0 - d, 1.2) * (1.0 - vT) * min(1.0, vT * 8.0) * 0.85;
+      gl_FragColor = vec4(vec3(0.025, 0.022, 0.02) + vT * 0.07, a);
+    }`,
+});
+const smokePts = new THREE.Points(sGeo, sMat);
+smokePts.frustumCulled = false;
+scene.add(smokePts);
+let sHead = 0, sDirty = false;
+function emitSmoke(p, v, life, size) {
+  const i = sHead;
+  sHead = (sHead + 1) % SMAX;
+  sPos[i * 3] = p.x; sPos[i * 3 + 1] = p.y; sPos[i * 3 + 2] = p.z;
+  sVel[i * 3] = v.x; sVel[i * 3 + 1] = v.y; sVel[i * 3 + 2] = v.z;
+  sInfo[i * 3] = now; sInfo[i * 3 + 1] = life; sInfo[i * 3 + 2] = size;
+  sDirty = true;
+}
+
 /* ================= 光束 / 闪光 ================= */
 const COL = {
   repulsor: new THREE.Color(1.6, 3.2, 4.5),
@@ -651,12 +750,13 @@ const S = {
   laser: { on: false, t: 0, cd: 0 },
   gun: { cd: 0, until: 0, shots: 0, next: 0, n: 0 }, gunT: 0,
   snap: { state: 'idle', t: 0, cd: 0 }, snapW: 0,
+  armor: 100, shield: 100, lastHit: -9, invuln: 0, hurtFlash: 0, down: false, downT: 0, nextBeep: 0,
   thrust: 0, emitAcc: 0, shake: 0,
-  faceYaw: undefined,   // 设了就固定朝这个方向开火（录演示视频时镜头绕到正面用），平时跟着镜头
+  faceYaw: undefined, turnStep: 0,   // 设了就固定朝这个方向开火（录演示视频时镜头绕到正面用），平时跟着镜头
 };
 let camYaw = 0, camPitch = -0.1, locked = false;
 const camState = { dist: 4, pivot: new V3(0, 1.55, 0) };
-let aim = { point: new V3(0, 0, 50), tank: null };
+let aim = { point: new V3(0, 0, 50), target: null };
 
 /* ================= 输入 ================= */
 const key = {}, mouse = { l: false };
@@ -700,30 +800,102 @@ const CENTER = new THREE.Vector2();
 function aimPoint() {
   ray.setFromCamera(CENTER, camera);
   const list = [...rayMeshes];
-  for (const t of tanks) if (t.alive) list.push(t.g);
+  for (const t of enemies()) if (t.alive) list.push(t.g);
   // 跳过相机和角色之间的命中（低头时射线会先打到身后的地面）
   const minDist = camera.position.distanceTo(camState.pivot) + 0.3;
   for (const h of ray.intersectObjects(list, true)) {
     if (h.distance < minDist) continue;
-    let o = h.object, tank = null;
-    while (o) { if (o.userData.tank) { tank = o.userData.tank; break; } o = o.parent; }
-    return { point: h.point.clone(), tank };
+    let o = h.object, target = null;
+    while (o) { if (o.userData.target) { target = o.userData.target; break; } o = o.parent; }
+    return { point: h.point.clone(), target };
   }
-  return { point: ray.ray.at(400, new V3()), tank: null };
+  return { point: ray.ray.at(400, new V3()), target: null };
+}
+
+/* ================= 碰撞：房子、石头、山崖、油桶、坦克 ================= */
+// 用射线检测（房子、石头是一栋一块，射线先按包围球筛掉远处的，只算身边几个）
+const RAD = 0.45, COL_H = [0.35, 1.0, 1.65], DOWN = new V3(0, -1, 0);
+const colRay = new THREE.Raycaster(), _cA = new V3(), _cD = new V3(), _cN = new V3();
+let near = [];
+function castBlock(origin, dir, far) {
+  colRay.set(origin, dir);
+  colRay.far = far;
+  return colRay.intersectObjects(near, false)[0];
+}
+// 这一帧的位移 d：撞墙就去掉朝墙的分量，贴着墙滑；速度同样去掉朝墙的分量
+function collideMove(pos, d, vel) {
+  near = nearBlockers(pos, d.length() + 4);
+  for (let pass = 0; pass < 2; pass++) {
+    const len = d.length();
+    if (len < 1e-5) return;
+    _cD.copy(d).divideScalar(len);
+    let best = null;
+    for (const h of COL_H) {
+      const hit = castBlock(_cA.set(pos.x, pos.y + h, pos.z), _cD, len + RAD);
+      if (hit && (!best || hit.distance < best.distance)) best = hit;
+    }
+    if (!best) return;
+    _cN.copy(best.face.normal).transformDirection(best.object.matrixWorld);
+    if (_cN.dot(_cD) > 0) _cN.negate();
+    // 很平的面（屋顶、石头顶）交给落地处理，不当墙
+    if (_cN.y > 0.7) return;
+    _cN.y = 0;
+    _cN.normalize();
+    const into = d.dot(_cN);
+    if (into < 0) d.addScaledVector(_cN, -into);
+    const vin = vel.dot(_cN);
+    if (vin < 0) vel.addScaledVector(_cN, -vin);
+  }
+}
+// 已经贴得太近（转身、斜着蹭墙）时往外推一点
+function pushOut(pos) {
+  near = nearBlockers(pos, 3);
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4;
+    _cD.set(Math.sin(a), 0, Math.cos(a));
+    const hit = castBlock(_cA.set(pos.x, pos.y + 1.0, pos.z), _cD, RAD);
+    if (hit) pos.addScaledVector(_cD, -(RAD - hit.distance));
+  }
+  // 坦克：按车身方盒子推出去
+  for (const t of tanks) {
+    if (!t.alive && !t.wreck) continue;
+    const c = Math.cos(t.g.rotation.y), sn = Math.sin(t.g.rotation.y);
+    const dx = pos.x - t.g.position.x, dz = pos.z - t.g.position.z;
+    let lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+    const hx = 1.8 + RAD, hz = 3.4 + RAD;
+    if (Math.abs(lx) >= hx || Math.abs(lz) >= hz || pos.y > t.g.position.y + 2.0) continue;
+    if (hx - Math.abs(lx) < hz - Math.abs(lz)) lx = Math.sign(lx || 1) * hx; else lz = Math.sign(lz || 1) * hz;
+    pos.x = t.g.position.x + lx * c + lz * sn;
+    pos.z = t.g.position.z - lx * sn + lz * c;
+  }
+}
+// 脚下能站的高度：地形、屋顶、石头顶、坦克顶，取最高的
+function supportH(x, z, y) {
+  let g = terrainH(x, z);
+  near = nearBlockers(_cA.set(x, y, z), 3);
+  const hit = castBlock(_cA.set(x, y + 0.6, z), DOWN, 80);
+  if (hit) g = Math.max(g, hit.point.y);
+  for (const t of tanks) {
+    if (!t.alive && !t.wreck) continue;
+    const c = Math.cos(t.g.rotation.y), sn = Math.sin(t.g.rotation.y);
+    const dx = x - t.g.position.x, dz = z - t.g.position.z;
+    if (Math.abs(dx * c - dz * sn) < 1.8 && Math.abs(dx * sn + dz * c) < 3.4 && y >= t.g.position.y + 1.6) g = Math.max(g, t.g.position.y + 2.2);
+  }
+  return g;
 }
 
 /* ================= 移动 / 飞行 ================= */
 function physics(dt) {
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   const right = new V3(-fz, 0, fx);
-  const ix = (key.KeyD ? 1 : 0) - (key.KeyA ? 1 : 0), iz = (key.KeyW ? 1 : 0) - (key.KeyS ? 1 : 0);
+  const ix = S.down ? 0 : (key.KeyD ? 1 : 0) - (key.KeyA ? 1 : 0), iz = S.down ? 0 : (key.KeyW ? 1 : 0) - (key.KeyS ? 1 : 0);
   const boost = key.ShiftLeft || key.ShiftRight;
   const aiming = S.aimR > 0.3 || S.aimL > 0.3 || S.uni.state !== 'idle' || S.snap.state !== 'idle';
   const hs = Math.hypot(S.vel.x, S.vel.z);
   let yawT = S.yaw, tiltT = 0, rollT = 0;
 
   if (!S.flying) {
-    if (key.Space && S.takeoffT < 0 && S.landT < 0.2) S.takeoffT = 0;
+    if (key.Space && !S.down && S.takeoffT < 0 && S.landT < 0.2) S.takeoffT = 0;
     if (S.takeoffT >= 0) {
       S.takeoffT += dt;
       if (S.takeoffT > 0.32) {
@@ -744,28 +916,44 @@ function physics(dt) {
     S.vel.x += (wish.x * sp - S.vel.x) * k;
     S.vel.z += (wish.z * sp - S.vel.z) * k;
     S.vel.y = 0;
-    S.pos.addScaledVector(S.vel, dt);
-    S.pos.y = terrainH(S.pos.x, S.pos.z);
+    const move = _a.copy(S.vel).multiplyScalar(dt);
+    collideMove(S.pos, move, S.vel);
+    S.pos.add(move);
+    pushOut(S.pos);
+    const sup = supportH(S.pos.x, S.pos.z, S.pos.y);
+    // 从屋顶、石头上走出边缘：战衣自动悬停，不会一下掉到地上
+    if (sup < S.pos.y - 0.6 && S.takeoffT < 0) { S.flying = true; S.vel.y = -2; }
+    else S.pos.y = sup;
     // 步频跟着步幅走：每迈一步相位走 π，脚才不会在地上打滑
     S.walkPhase += hs * dt * Math.PI / (2 * suit.legLen * Math.sin(walkAmp(hs)));
     // 每迈一步（相位过 π）响一声脚步
     const step = Math.floor(S.walkPhase / Math.PI);
-    if (step !== S.lastStep) { S.lastStep = step; if (hs > 0.5) sfx.step(clamp(hs / 6, 0.4, 1)); }
+    if (step !== S.lastStep) { S.lastStep = step; if (hs > 0.5 || S.turnStep > 0.3) sfx.step(clamp(hs / 6, 0.4, 1)); }
     if (aiming) yawT = S.faceYaw ?? camYaw;
     else if (wish.lengthSq() > 0.01) yawT = Math.atan2(wish.x, wish.z);
+    const yaw0 = S.yaw;
     S.yaw = lerpAngle(S.yaw, yawT, damp(10, dt));
+    // 原地转身：转得快就原地挪步（相位推进，腿按小步幅摆），不再是脚贴地滑过去
+    const turnRate = Math.abs(angDiff(S.yaw, yaw0)) / dt;
+    const turning = hs < 0.6 && turnRate > 0.6 ? clamp(turnRate / 3, 0.35, 0.7) : 0;
+    S.turnStep += (turning - S.turnStep) * damp(turning ? 12 : 6, dt);
+    if (turning) S.walkPhase += turnRate * dt * 1.6;
   } else {
     // 飞行：W 朝准星方向（含俯仰），空格/C 上下，松手悬停
     const cp = Math.cos(camPitch);
     const wish = new V3(fx * cp, Math.sin(camPitch), fz * cp).multiplyScalar(iz).addScaledVector(right, ix);
-    wish.y += (key.Space ? 1 : 0) - (key.KeyC ? 1 : 0);
+    // 宕机时推进器熄火，往下掉
+    wish.y += S.down ? -1.6 : (key.Space ? 1 : 0) - (key.KeyC ? 1 : 0);
     if (wish.lengthSq() > 1) wish.normalize();
     S.vel.lerp(wish.multiplyScalar(boost ? 40 : 15), damp(boost ? 1.6 : 2.4, dt));
-    S.pos.addScaledVector(S.vel, dt);
-    const gy = terrainH(S.pos.x, S.pos.z);
+    const move = _a.copy(S.vel).multiplyScalar(dt);
+    collideMove(S.pos, move, S.vel);
+    S.pos.add(move);
+    pushOut(S.pos);
+    const gy = supportH(S.pos.x, S.pos.z, S.pos.y);
     if (S.pos.y <= gy) {
       S.pos.y = gy;
-      if (!key.Space) land();
+      if (!key.Space || S.down) land();
       else S.vel.y = Math.max(S.vel.y, 0);
     }
     yawT = aiming ? S.faceYaw ?? camYaw : hs > 3 ? Math.atan2(S.vel.x, S.vel.z) : camYaw;
@@ -819,6 +1007,7 @@ function pose(dt) {
   let ct = 0;
   if (S.takeoffT >= 0) ct = 0.75;
   if (S.landT > 0) ct = S.landDeep ? 1 : 0.5;
+  if (S.down && !S.flying) ct = 1;
   S.crouch += (ct - S.crouch) * damp(S.landT > 0 ? 20 : 9, dt);
   S.uniW += ((S.uni.state === 'idle' ? 0 : 1) - S.uniW) * damp(8, dt);
   const fly = S.fly, cr = S.cruise, c = S.crouch, u = S.uniW;
@@ -832,19 +1021,21 @@ function pose(dt) {
   suit.off.hips.y = -c * 0.43 - walk * 0.3 * suit.legLen * (1 - Math.cos(amp * sw)) + fly * Math.sin(t * 2.2) * 0.025;
   // 盔甲很重：胯和上身只轻微扭转，跑步时身体前倾
   B.hips.set(S.tilt + c * 0.45 + run * 0.1, sw * 0.035 * walk, S.roll);
-  B.spine.set(br * 0.012 - u * 0.18, -sw * 0.02 * walk, 0);
-  B.chest.set(br * 0.015 - u * 0.12 + run * 0.04, -sw * 0.025 * walk, 0);
+  const landLean = S.landDeep ? c * 0.62 : 0;
+  B.spine.set(br * 0.012 - u * 0.18 + landLean, -sw * 0.02 * walk, 0);
+  B.chest.set(br * 0.015 - u * 0.12 + run * 0.04 + landLean, -sw * 0.025 * walk, 0);
   // 镜头转到身后/正面时不扭头，免得像被拧断脖子
   const yawD = angDiff(camYaw, S.yaw);
   const look = clamp(yawD, -0.7, 0.7) * clamp(1 - (Math.abs(yawD) - 1) / 0.6, 0, 1);
   B.neck.set(0, look * 0.25, 0);
-  B.head.set(clamp(-camPitch * 0.3 - S.tilt * 0.8 - c * 0.3, -0.9, 0.4), look * 0.5, 0);
+  B.head.set(clamp(-camPitch * 0.3 - S.tilt * 0.8 - c * 0.3, -0.9, 0.4) + (S.down ? 0.55 : 0), look * 0.5, 0);
 
   for (const [n, s, off] of [['L', 1, 0], ['R', -1, Math.PI]]) {
     const p = ph + off, sp = Math.sin(p);
     // 摆腿时（cos>0）屈膝抬脚，着地时腿基本伸直；脚掌始终尽量和地面平行
-    const wThigh = -sp * amp * walk;
-    const wShin = (0.06 + lerp(0.45, 0.75, run) * Math.max(0, Math.cos(p)) ** 2) * walk;
+    const legW = S.flying ? 0 : Math.max(walk, S.turnStep);
+    const wThigh = -sp * amp * legW;
+    const wShin = (0.06 + lerp(0.45, 0.75, run) * Math.max(0, Math.cos(p)) ** 2) * legW;
     const gThigh = wThigh - c * 1.25;
     const gShin = wShin + c * 2.1;
     const gFoot = -(wThigh + wShin) * 0.85 - c * 1.3;
@@ -874,7 +1065,13 @@ function pose(dt) {
     // 重落地：右拳撑地、左臂后展
     if (S.landDeep && c > 0.3) {
       const d = (c - 0.3) / 0.7;
-      if (n === 'R') { ux = lerp(ux, -0.9, d); uz = lerp(uz, -0.15, d); fx = lerp(fx, -0.2, d); }
+      if (n === 'R') {
+        // 右臂伸直，拳头撑在身体右前方的地面上
+        const fx0 = Math.sin(S.yaw), fz0 = Math.cos(S.yaw);
+        const a = armAimAngles('R', _p.set(S.pos.x + fx0 * 0.42 - fz0 * 0.3, S.pos.y - 0.1, S.pos.z + fz0 * 0.42 + fx0 * 0.3));
+        ux = lerp(ux, a.x, d); uy = lerp(uy, a.y, d); uz = lerp(uz, 0, d);
+        fx = lerp(fx, 0, d); hx = lerp(hx, 0, d); hy = lerp(hy, 0, d);
+      }
       else { ux = lerp(ux, 0.9, d); uz = lerp(uz, 0.9, d); }
     }
     // 胸口光束：挺胸、双臂后张
@@ -904,20 +1101,40 @@ function pose(dt) {
 }
 
 /* ================= 武器 ================= */
-function damage(tank, amt) {
-  if (!tank.alive) return;
-  tank.hp -= amt;
-  if (tank.hp <= 0) {
-    tank.alive = false;
-    tank.g.visible = false;
-    tank.respawn = now + 8;
-    explosion(_p.copy(tank.g.position).setY(1.2), 2.2);
-  }
+// 光束、激光、子弹不穿墙：发射点到准星之间被房子、石头挡住，就打在挡住的地方
+const shotRay = new THREE.Raycaster(), _sA = new V3(), _sD = new V3();
+function clipShot(from, to) {
+  _sD.copy(to).sub(from);
+  const len = _sD.length();
+  if (len < 0.5) return null;
+  _sD.divideScalar(len);
+  // 只挑包围球碰到这条线段的物体
+  const cand = camBlockers.filter(o => {
+    const c = o.userData.ws.center;
+    const t = clamp(_sA.copy(c).sub(from).dot(_sD), 0, len);
+    return _sA.copy(from).addScaledVector(_sD, t).distanceTo(c) < o.userData.ws.radius;
+  });
+  if (!cand.length) return null;
+  shotRay.set(from, _sD);
+  shotRay.far = len - 0.3;
+  const h = shotRay.intersectObjects(cand, false)[0];
+  return h ? h.point.clone() : null;
+}
+
+
+function damage(t, amt) {
+  if (!t.alive) return;
+  t.hp -= amt;
+  if (t.hp > 0) return;
+  if (t.kind === 'drone') { killDrone(t, false); return; }
+  wreckTank(t);
+  explosion(_p.copy(t.g.position).setY(t.g.position.y + 1.2), 2.2);
 }
 
 function fireRepulsor() {
   const from = suit.emit.emit_palm_R.getWorldPosition(new V3());
-  const to = aim.point.clone();
+  const wall = clipShot(from, aim.point);
+  const to = wall ?? aim.point.clone();
   beam(from, to, COL.repulsor, 0.06, 0.14);
   for (let i = 0; i < 16; i++) emit(to, randDir(_v).multiplyScalar(3 + rnd() * 5), 0.35, 0.25, 3);
   for (let i = 0; i < 6; i++) emit(to, randDir(_v).multiplyScalar(6 + rnd() * 6), 0.5, 0.08, 2);
@@ -926,25 +1143,27 @@ function fireRepulsor() {
   S.palmFlash = 1;
   sfx.repulsor(to);
   S.repCd = 0.2;
-  if (aim.tank) damage(aim.tank, 1);
+  if (aim.target && !wall) damage(aim.target, 1);
 }
 
 function startUnibeam() {
-  if (S.uni.state !== 'idle' || S.uni.cd > 0) return;
+  if (S.down || S.uni.state !== 'idle' || S.uni.cd > 0) return;
   S.uni.state = 'charge';
   S.uni.t = 0;
   sfx.uniCharge();
 }
 
 function fireGuns() {
-  if (S.gun.cd > 0) return;
+  if (S.down || S.gun.cd > 0) return;
   Object.assign(S.gun, { cd: 3.5, until: now + 1.7, shots: 12, next: now + 0.32 });
+  const n = lockTargets().length;
+  notice(n ? `TARGETS LOCKED · ${n}` : 'NO TARGET', n ? '#ffb347' : '#8fe3ff');
 }
 
-// 肩炮自动锁定：前方 140 米内最近的几辆坦克
+// 肩炮自动锁定：前方 140 米内最近的几个目标（坦克、无人机）
 function lockTargets() {
   const fwd = _d.set(Math.sin(camYaw), 0, Math.cos(camYaw));
-  return tanks
+  return enemies()
     .filter(t => t.alive && t.g.position.distanceTo(S.pos) < 140 && _a.copy(t.g.position).sub(S.pos).setY(0).normalize().dot(fwd) > 0.3)
     .sort((a, b) => a.g.position.distanceTo(S.pos) - b.g.position.distanceTo(S.pos))
     .slice(0, 4);
@@ -953,7 +1172,7 @@ function lockTargets() {
 function weapons(dt) {
   // 掌心炮：先抬手，手臂到位再开火
   S.repCd = Math.max(0, S.repCd - dt);
-  if (mouse.l) { S.lastFireR = now; S.repWant = true; }
+  if (mouse.l && !S.down) { S.lastFireR = now; S.repWant = true; }
   const wantR = now - S.lastFireR < 0.9 ? 1 : 0;
   S.aimR += (wantR - S.aimR) * damp(wantR ? 16 : 4, dt);
   if (S.repWant && S.aimR > 0.8 && S.repCd <= 0) { S.repWant = false; fireRepulsor(); }
@@ -979,7 +1198,8 @@ function weapons(dt) {
   } else if (U.state === 'fire') {
     U.t += dt;
     reactorGlow = 30 + Math.sin(now * 50) * 4;
-    const to = aim.point;
+    const wall = clipShot(reactor, aim.point);
+    const to = wall ?? aim.point;
     _d.copy(to).sub(reactor);
     const len = _d.length();
     uniBeam.visible = true;
@@ -990,7 +1210,7 @@ function weapons(dt) {
     for (let i = 0; i < 4; i++) emit(to, randDir(_v).multiplyScalar(4 + rnd() * 6), 0.4, 0.4, 3);
     for (let i = 0; i < 2; i++) emit(to, randDir(_v).multiplyScalar(8 + rnd() * 8), 0.6, 0.1, 2);
     flash(to, COL.cyan, 150);
-    if (aim.tank) damage(aim.tank, 99);
+    if (aim.target && !wall) damage(aim.target, 99);
     if (S.flying) S.vel.addScaledVector(_d, -4 * dt);
     S.shake = Math.max(S.shake, 0.25);
     if (U.t >= 1.3) { U.state = 'idle'; U.cd = 4; uniBeam.visible = false; }
@@ -1000,13 +1220,14 @@ function weapons(dt) {
   // 小臂激光：按住 Q 左臂抬起对准准星，手臂到位才出光；最长连续 2.5 秒，打满冷却 3 秒
   const Z = S.laser;
   Z.cd = Math.max(0, Z.cd - dt);
-  if (key.KeyQ && Z.cd <= 0 && Z.t < LASER_MAX) { Z.on = true; S.aimLUntil = now + 0.4; }
+  if (key.KeyQ && !S.down && Z.cd <= 0 && Z.t < LASER_MAX) { Z.on = true; S.aimLUntil = now + 0.4; }
   else if (Z.on) { Z.on = false; Z.cd = Z.t >= LASER_MAX ? 3 : 0.6; Z.t = 0; }
   const lasing = Z.on && S.aimL > 0.75;
   if (lasing) {
     Z.t += dt;
     const from = suit.emit.emit_missile.getWorldPosition(new V3());
-    const to = aim.point;
+    const wall = clipShot(from, aim.point);
+    const to = wall ?? aim.point;
     _d.copy(to).sub(from);
     const len = _d.length();
     laserBeam.position.copy(from).addScaledVector(_d, 0.5);
@@ -1017,7 +1238,7 @@ function weapons(dt) {
     for (let i = 0; i < 3; i++) emit(to, randDir(_v).multiplyScalar(5 + rnd() * 7).add(_b.set(0, 2, 0)), 0.5 + rnd() * 0.4, 0.06, 2);
     emit(to, randDir(_v).multiplyScalar(0.6), 0.25, 0.35, 1);
     flash(to, LASER_COL, 60);
-    if (aim.tank) damage(aim.tank, 1.6 * dt);
+    if (aim.target && !wall) damage(aim.target, 1.6 * dt);
   }
   laserBeam.visible = lasing;
   sfx.laser(lasing);
@@ -1032,17 +1253,25 @@ function weapons(dt) {
     const n = G.n++ % 2 ? 'L' : 'R';
     const muzzle = suit.emit['emit_gun_' + n].getWorldPosition(new V3());
     const locks = lockTargets();
-    let tp;
+    let tp, tk = null;
     if (locks.length) {
-      const tk = locks[(G.n >> 1) % locks.length];
-      tp = tk.g.position.clone().add(new V3((rnd() - 0.5) * 1.5, 1 + rnd() * 0.8, (rnd() - 0.5) * 1.5));
-      damage(tk, 0.5);
+      tk = locks[(G.n >> 1) % locks.length];
+      const sp = tk.kind === 'drone' ? 0.3 : 1.5;
+      tp = tk.g.position.clone().add(new V3((rnd() - 0.5) * sp, tk.aimY + (rnd() - 0.2) * sp * 0.5, (rnd() - 0.5) * sp));
     } else {
       tp = aim.point.clone().add(randDir(new V3()).multiplyScalar(0.8));
     }
-    beam(muzzle, tp, COL.tracer, 0.022, 0.05);
+    const wall = clipShot(muzzle, tp);
+    if (wall) tp = wall;
+    else if (tk) damage(tk, 0.5);
+    beam(muzzle, tp, COL.tracer, 0.05, 0.09);
     sfx.gun();
-    for (let i = 0; i < 6; i++) emit(tp, randDir(_v).multiplyScalar(5 + rnd() * 6), 0.4, 0.07, 2);
+    // 肩部炮口火光
+    for (let i = 0; i < 4; i++) emit(muzzle, randDir(_v).multiplyScalar(1.5).add(_b.copy(tp).sub(muzzle).setLength(4)), 0.12, 0.25, 1);
+    flash(muzzle, COL.fire, 25);
+    // 命中：火花 + 小火球
+    for (let i = 0; i < 10; i++) emit(tp, randDir(_v).multiplyScalar(5 + rnd() * 7), 0.45, 0.08, 2);
+    for (let i = 0; i < 3; i++) emit(tp, randDir(_v).multiplyScalar(1.5), 0.35, 0.5, 1);
   }
 }
 
@@ -1050,10 +1279,12 @@ function weapons(dt) {
 const SNAP_CD = 20;
 S.snapFlash = 0;
 function startSnap() {
-  if (S.snap.state !== 'idle' || S.snap.cd > 0) return;
+  if (S.down || S.snap.state !== 'idle' || S.snap.cd > 0) return;
   S.snap.state = 'raise';
   S.snap.t = 0;
   S.snapStone = 0;
+  S.snapSfx = false;
+  sfx.snapCharge();
 }
 // 坦克化成灰：在车身范围里撒灰烬，随风飘散
 function dustTank(t) {
@@ -1081,6 +1312,8 @@ function updateSnap(dt) {
       // 宝石依次点亮，手周围聚能
       lit = N.t;
       if (S.snapStone < 6 && lit > S.snapStone * 0.15) sfx.stone(S.snapStone++);
+      // 响指音效里「轰」在 0.38 秒处，提前开播，让它和白光闪屏同时到
+      if (!S.snapSfx && N.t >= 1.3 - 0.38) { S.snapSfx = true; sfx.snap(); }
       if (rnd() < 0.6) {
         randDir(_d).multiplyScalar(0.3 + rnd() * 0.3);
         emit(_a.copy(hand).add(_d), _v.copy(_d).multiplyScalar(-5), 0.3, 0.05, rnd() < 0.5 ? 2 : 3);
@@ -1089,11 +1322,10 @@ function updateSnap(dt) {
         N.state = 'after';
         N.t = 0;
         S.snapFlash = 1;
-        sfx.snap();
         S.shake = 1;
         flash(hand, new THREE.Color(1, 0.95, 0.85), 3000);
         for (let i = 0; i < 120; i++) emit(hand, randDir(_v).multiplyScalar(4 + rnd() * 10), 0.6 + rnd() * 0.5, 0.15, i % 2 ? 2 : 3);
-        for (const t of tanks) if (t.alive && t.g.position.distanceTo(S.pos) < 150) t.dustAt = now + 0.6 + rnd() * 1.6;
+        for (const t of enemies()) if (t.alive && t.g.position.distanceTo(S.pos) < 150) t.dustAt = now + 0.6 + rnd() * 1.6;
       }
     } else {
       lit = 1.3 - N.t * 0.8;
@@ -1104,9 +1336,323 @@ function updateSnap(dt) {
   if (N.state !== 'idle') setGlow('glow_palm_R', 2 + lit * 6);
 }
 
+/* ================= 敌人反击：坦克开炮、无人机射击；钢铁侠有护盾和装甲 ================= */
+const SHELL_SPEED = 90, BOLT_SPEED = 55;
+const _e1 = new V3(), _e2 = new V3(), _e3 = new V3();
+const playerCenter = out => out.set(S.pos.x, S.pos.y + 1.2, S.pos.z);
+
+// 炮口位置（炮塔本地坐标）：炮塔模型最前端、炮管高度
+function muzzleLocal(tur) {
+  if (!tur.geometry) return new V3(0, 0.4, 4.2);
+  tur.geometry.computeBoundingBox();
+  const b = tur.geometry.boundingBox;
+  return new V3((b.min.x + b.max.x) / 2, b.min.y + 0.55, b.max.z);
+}
+for (const t of tanks) Object.assign(t, { kind: 'tank', aimY: 1.2, muzzle: muzzleLocal(t.turret), reload: 4 + rnd() * 6,
+  speed: 0, orbit: rnd() < 0.5 ? -1 : 1, wreck: false, turretY0: t.turret.position.y });
+
+// 无人机：机身 + 四个旋翼 + 红色「眼睛」，用代码拼的
+const droneMat = {
+  body: new THREE.MeshStandardMaterial({ color: 0x2b2e33, metalness: 0.85, roughness: 0.35 }),
+  dark: new THREE.MeshStandardMaterial({ color: 0x111214, metalness: 0.6, roughness: 0.5 }),
+  rotor: new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.35, depthWrite: false }),
+  eye: new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2a1a, emissiveIntensity: 5 }),
+};
+function makeDrone() {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z) => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    g.add(m);
+    return m;
+  };
+  add(new RoundedBoxGeometry(0.6, 0.2, 0.7, 2, 0.06), droneMat.body, 0, 0, 0);
+  add(new THREE.SphereGeometry(0.2, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), droneMat.body, 0, 0.08, -0.05);
+  add(new THREE.SphereGeometry(0.07, 12, 8), droneMat.eye, 0, 0, 0.36);
+  add(new THREE.CylinderGeometry(0.04, 0.04, 0.35, 8), droneMat.dark, 0, -0.14, 0.15).rotation.x = Math.PI / 2;
+  const rotors = [];
+  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    add(new THREE.BoxGeometry(0.55, 0.05, 0.07), droneMat.dark, sx * 0.32, 0.02, sz * 0.32).rotation.y = sx * sz > 0 ? -Math.PI / 4 : Math.PI / 4;
+    add(new THREE.CylinderGeometry(0.06, 0.06, 0.1, 10), droneMat.dark, sx * 0.5, 0.06, sz * 0.5);
+    const r = add(new THREE.CylinderGeometry(0.26, 0.26, 0.01, 24), droneMat.rotor, sx * 0.5, 0.12, sz * 0.5);
+    r.castShadow = false;
+    rotors.push(r);
+  }
+  g.userData.rotors = rotors;
+  return g;
+}
+const drones = Array.from({ length: 5 }, (_, i) => {
+  const g = makeDrone();
+  g.visible = false;
+  scene.add(g);
+  const d = { kind: 'drone', g, hp: 1, alive: false, respawn: 6 + i * 3, aimY: 0, vel: new V3(),
+    ang: rnd() * Math.PI * 2, radius: 16 + rnd() * 10, alt: 4 + rnd() * 6, reload: 0 };
+  g.userData.target = d;
+  return d;
+});
+const enemies = () => [...tanks, ...drones];
+
+// ---- 敌方弹药：看得见的曳光弹，可以躲 ----
+const shellMat = uniMat(new THREE.Color(4, 2.2, 0.8)), boltMat = uniMat(new THREE.Color(5, 0.4, 0.3));
+const projectiles = [];
+const projRay = new THREE.Raycaster();
+function spawnProjectile(from, vel, kind) {
+  const m = new THREE.Mesh(beamGeo, kind === 'shell' ? shellMat : boltMat);
+  m.frustumCulled = false;
+  scene.add(m);
+  projectiles.push({ pos: from.clone(), vel, kind, life: 3, m });
+}
+// 瞄准钢铁侠的提前量 + 随机偏差，飞得快的时候容易打偏
+function leadTarget(from, speed, spread) {
+  const pc = playerCenter(new V3());
+  return pc.addScaledVector(S.vel, pc.distanceTo(from) / speed * 0.8).add(randDir(_e3).multiplyScalar(spread));
+}
+function fireShell(t) {
+  const from = t.turret.localToWorld(t.muzzle.clone());
+  spawnProjectile(from, leadTarget(from, SHELL_SPEED, 2.2).sub(from).normalize().multiplyScalar(SHELL_SPEED), 'shell');
+  for (let i = 0; i < 14; i++) emit(from, randDir(_v).multiplyScalar(2 + rnd() * 3), 0.3 + rnd() * 0.3, 0.5, 1);
+  for (let i = 0; i < 10; i++) emit(from, randDir(_v).multiplyScalar(1.5), 1.2 + rnd(), 1.0, 4);
+  flash(from, COL.fire, 150);
+  sfx.cannon(from);
+}
+function fireBolt(d) {
+  const from = d.g.localToWorld(new V3(0, -0.14, 0.4));
+  spawnProjectile(from, leadTarget(from, BOLT_SPEED, 1.4).sub(from).normalize().multiplyScalar(BOLT_SPEED), 'bolt');
+  flash(from, LASER_COL, 15);
+  sfx.bolt(from);
+}
+function impact(p, at, hitPlayer) {
+  if (p.kind === 'shell') {
+    explosion(at, 0.7);
+    // 没直接打中也有溅射：4 米内按距离衰减
+    const d = playerCenter(_e1).distanceTo(at);
+    if (hitPlayer) hurt(22);
+    else if (d < 4) hurt(14 * (1 - d / 4));
+  } else {
+    for (let i = 0; i < 8; i++) emit(at, randDir(_v).multiplyScalar(3 + rnd() * 4), 0.35, 0.06, 2);
+    flash(at, LASER_COL, 20);
+    if (hitPlayer) hurt(6);
+  }
+}
+function updateProjectiles(dt) {
+  const pc = playerCenter(_e1).clone();
+  for (let i = projectiles.length - 1; i >= 0; i--) {
+    const p = projectiles[i];
+    const shell = p.kind === 'shell';
+    const step = p.vel.length() * dt;
+    const dir = _e2.copy(p.vel).normalize();
+    p.life -= dt;
+    // 这一帧飞过的线段：先看离钢铁侠够不够近，再看有没有撞到房子石头、地面
+    const rel = _e3.copy(pc).sub(p.pos);
+    const along = clamp(rel.dot(dir), 0, step);
+    const miss = rel.addScaledVector(dir, -along).length();
+    let hitAt = null, hitPlayer = false;
+    if (!S.down && now >= S.invuln && miss < (shell ? 1.3 : 0.9)) {
+      hitAt = p.pos.clone().addScaledVector(dir, along);
+      hitPlayer = true;
+    } else {
+      projRay.set(p.pos, dir);
+      projRay.far = step;
+      const h = projRay.intersectObjects(nearBlockers(p.pos, step + 2), false)[0];
+      if (h) hitAt = h.point.clone();
+      else {
+        const next = p.pos.clone().addScaledVector(dir, step);
+        const gy = terrainH(next.x, next.z);
+        if (next.y < gy) hitAt = next.setY(gy);
+      }
+    }
+    if (hitAt || p.life <= 0) {
+      if (hitAt) impact(p, hitAt, hitPlayer);
+      scene.remove(p.m);
+      projectiles.splice(i, 1);
+      continue;
+    }
+    p.pos.addScaledVector(dir, step);
+    const len = shell ? 2.4 : 1.4, r = shell ? 0.07 : 0.05;
+    p.m.position.copy(p.pos).addScaledVector(dir, -len / 2);
+    p.m.quaternion.setFromUnitVectors(UP, dir);
+    p.m.scale.set(r, len, r);
+    if (shell && rnd() < 0.5) emit(p.pos, _v.set(0, 0.3, 0), 0.6, 0.35, 4);
+  }
+}
+
+// ---- 坦克：开动起来，和钢铁侠保持 40~75 米绕着包抄；炮塔转向他，对准了才开炮 ----
+const TANK_SPEED = 4.5, TANK_TURN = 0.6;
+const tankRay = new THREE.Raycaster();
+// 被打爆：车身烧焦发黑、炮塔炸歪，冒十几秒黑烟和余火，之后残骸消失，从村外开来一辆新的
+const charred = new Map();
+function charredOf(m) {
+  if (!charred.has(m)) {
+    const c = m.clone();
+    c.color.multiplyScalar(0.12);
+    c.roughness = 1;
+    c.metalness = 0.1;
+    charred.set(m, c);
+  }
+  return charred.get(m);
+}
+function wreckTank(t) {
+  t.alive = false;
+  t.wreck = true;
+  t.wreckUntil = now + 14;
+  t.respawn = now + 16;
+  t.g.traverse(o => { if (o.isMesh) { o.userData.orig ??= o.material; o.material = charredOf(o.userData.orig); } });
+  t.turret.rotation.y += (rnd() - 0.5) * 1.2;
+  t.turret.rotation.z = (rnd() - 0.5) * 0.35;
+  t.turret.position.y = t.turretY0 + 0.15;
+}
+function respawnTank(t) {
+  // 在村外 170~190 米找块空地，朝村子中央开进来
+  for (let k = 0; k < 20; k++) {
+    const a = rnd() * Math.PI * 2, r = 170 + rnd() * 20;
+    const x = Math.sin(a) * r, z = Math.cos(a) * r;
+    if (nearBlockers(_e3.set(x, 1, z), 6).length) continue;
+    t.g.position.set(x, terrainH(x, z), z);
+    t.g.rotation.y = Math.atan2(-x, -z);
+    break;
+  }
+  t.g.traverse(o => { if (o.isMesh && o.userData.orig) o.material = o.userData.orig; });
+  t.turret.rotation.set(0, 0, 0);
+  t.turret.position.y = t.turretY0;
+  Object.assign(t, { alive: true, wreck: false, hp: 3, reload: 3 + rnd() * 3, speed: 0 });
+  t.g.visible = true;
+}
+function driveTank(t, pc, dt) {
+  const p = t.g.position;
+  const dx = pc.x - p.x, dz = pc.z - p.z, dist = Math.hypot(dx, dz);
+  const toP = Math.atan2(dx, dz);
+  let want = dist > 75 ? toP : dist < 40 ? toP + Math.PI : toP + t.orbit * Math.PI / 2;
+  if (Math.hypot(p.x, p.z) > 200) want = Math.atan2(-p.x, -p.z);   // 别开出村子盆地
+  // 和别的坦克拉开距离
+  for (const o of tanks) {
+    if (o === t || !(o.alive || o.wreck)) continue;
+    const ox = p.x - o.g.position.x, oz = p.z - o.g.position.z;
+    if (ox * ox + oz * oz < 100) want = lerpAngle(want, Math.atan2(ox, oz), 0.5);
+  }
+  // 前方 9 米有房子、石头、残骸就往旁边拐，减速
+  let speedT = TANK_SPEED;
+  const h = t.g.rotation.y;
+  tankRay.set(_e3.set(p.x, p.y + 1.2, p.z), _e2.set(Math.sin(h), 0, Math.cos(h)));
+  tankRay.far = 9;
+  if (tankRay.intersectObjects(nearBlockers(p, 12), false).length) {
+    want = h + t.orbit * 1.3;
+    speedT = 1.5;
+    if (rnd() < dt * 0.3) t.orbit *= -1;
+  }
+  t.g.rotation.y += clamp(angDiff(want, h), -TANK_TURN * dt, TANK_TURN * dt);
+  t.speed += (speedT - t.speed) * damp(1.5, dt);
+  p.x += Math.sin(t.g.rotation.y) * t.speed * dt;
+  p.z += Math.cos(t.g.rotation.y) * t.speed * dt;
+  p.y = terrainH(p.x, p.z);
+  // 履带扬起的沙尘
+  if (rnd() < t.speed * dt * 2) emit(_e3.set(p.x - Math.sin(h) * 3 + (rnd() - 0.5) * 3, p.y + 0.3, p.z - Math.cos(h) * 3), _v.set(0, 0.5, 0), 1.5, 1.4, 4);
+}
+function updateTanks(dt) {
+  const pc = playerCenter(_e1).clone();
+  for (const t of tanks) {
+    if (t.dustAt && now >= t.dustAt) { t.dustAt = 0; dustTank(t); }
+    if (t.wreck) {
+      const top = _e3.copy(t.g.position).setY(t.g.position.y + 2.2);
+      const k = clamp((t.wreckUntil - now) / 14, 0, 1);
+      if (rnd() < dt * 30 * k) emitSmoke(top.clone().add(randDir(_v).multiplyScalar(0.6)), _v.set(0, 1.5, 0), 4 + rnd() * 2, 2 + rnd() * 1.2);
+      if (k > 0.55 && rnd() < dt * 14) emit(top, randDir(_v).multiplyScalar(0.6).add(_e2.set(0, 1.2, 0)), 0.5 + rnd() * 0.4, 0.5, 1);
+      if (now > t.wreckUntil) { t.wreck = false; t.g.visible = false; }
+    }
+    if (!t.alive) {
+      if (now > t.respawn && !t.wreck) respawnTank(t);
+      continue;
+    }
+    if (!S.down) driveTank(t, pc, dt);
+    const to = _e2.copy(pc).sub(t.g.position);
+    if (to.length() < 110 && !S.down) {
+      const want = Math.atan2(to.x, to.z) - t.g.rotation.y;
+      t.turret.rotation.y = lerpAngle(t.turret.rotation.y, want, damp(1.5, dt));
+      t.reload -= dt;
+      if (t.reload <= 0 && Math.abs(angDiff(want, t.turret.rotation.y)) < 0.1) { fireShell(t); t.reload = 5 + rnd() * 4; }
+    } else {
+      t.turret.rotation.y = lerpAngle(t.turret.rotation.y, Math.sin(now * 0.3 + t.phase) * 0.8, damp(1, dt));
+    }
+  }
+}
+
+// ---- 无人机：从远处飞来，绕着钢铁侠盘旋射击；打下来几秒后从远处补一架 ----
+function spawnDrone(d) {
+  const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 140, z = S.pos.z + Math.cos(a) * 140;
+  d.g.position.set(x, terrainH(x, z) + 30, z);
+  d.vel.set(0, 0, 0);
+  Object.assign(d, { hp: 1, alive: true, reload: 4 + rnd() * 3 });
+  d.g.visible = true;
+}
+function killDrone(d, dust) {
+  d.alive = false;
+  d.g.visible = false;
+  d.respawn = now + 8 + rnd() * 4;
+  if (!dust) { explosion(d.g.position.clone(), 0.5); return; }
+  sfx.dust(d.g.position);
+  for (let i = 0; i < 40; i++) emit(_p.copy(d.g.position).add(randDir(_v).multiplyScalar(0.4)), _v.set(1 + rnd(), 0.5 + rnd(), 0.6 + rnd()), 2 + rnd() * 2, 0.2, 5);
+}
+function updateDrones(dt) {
+  const pc = playerCenter(_e1).clone();
+  for (const d of drones) {
+    if (d.dustAt && now >= d.dustAt) { d.dustAt = 0; killDrone(d, true); }
+    if (!d.alive) {
+      if (now > d.respawn && !S.down) spawnDrone(d);
+      continue;
+    }
+    d.ang += dt * 0.3;
+    const tx = pc.x + Math.sin(d.ang) * d.radius, tz = pc.z + Math.cos(d.ang) * d.radius;
+    const want = _e2.set(tx, Math.max(pc.y + d.alt, terrainH(tx, tz) + 3), tz).sub(d.g.position).multiplyScalar(1.2);
+    if (want.length() > 16) want.setLength(16);
+    d.vel.lerp(want, damp(2, dt));
+    d.g.position.addScaledVector(d.vel, dt);
+    d.g.lookAt(pc);
+    for (const r of d.g.userData.rotors) r.rotation.y += dt * 40;
+    d.reload -= dt;
+    if (d.reload <= 0 && d.g.position.distanceTo(pc) < 70 && !S.down) { fireBolt(d); d.reload = 1.4 + rnd() * 1.8; }
+  }
+}
+
+// ---- 钢铁侠受伤：先扣护盾（几秒不挨打自动回满），护盾没了才扣装甲 ----
+function hurt(amount) {
+  if (S.down || now < S.invuln || amount <= 0) return;
+  const absorbed = Math.min(S.shield, amount);
+  S.shield -= absorbed;
+  const rest = amount - absorbed;
+  S.armor = Math.max(0, S.armor - rest);
+  S.lastHit = now;
+  S.hurtFlash = Math.min(1, S.hurtFlash + (rest > 0 ? 0.7 : 0.35));
+  S.shake = Math.max(S.shake, rest > 0 ? 0.5 : 0.25);
+  const c = playerCenter(_e1).clone();
+  // 护盾挡下：身体周围一圈蓝色电光；打到装甲：火花四溅
+  if (absorbed > 0) for (let i = 0; i < 24; i++) { randDir(_d); emit(_a.copy(c).addScaledVector(_d, 0.9), _v.copy(_d).multiplyScalar(1.5), 0.35, 0.12, 3); }
+  if (rest > 0) for (let i = 0; i < 18; i++) emit(c, randDir(_v).multiplyScalar(4 + rnd() * 5), 0.4 + rnd() * 0.3, 0.07, 2);
+  sfx.hit(rest > 0);
+  if (S.armor <= 0) { S.down = true; S.downT = 0; sfx.powerDown(); }
+}
+// 装甲打光 → 战衣宕机，掉到地上跪着；4.5 秒后在村子中央重启，3 秒无敌
+function updateSuit(dt) {
+  if (S.down) {
+    S.downT += dt;
+    setGlow('glow_eyes', rnd() < 0.08 ? 1.5 : 0);
+    setGlow('glow_reactor', 0.2 + (rnd() < 0.06 ? 2 : 0));
+    if (S.downT > 4.5) {
+      Object.assign(S, { down: false, flying: false, armor: 100, shield: 100, invuln: now + 3, landT: 0, takeoffT: -1 });
+      S.pos.set(0, 0, 0);
+      S.vel.set(0, 0, 0);
+      sfx.powerUp();
+    }
+  } else {
+    if (now - S.lastHit > 3) S.shield = Math.min(100, S.shield + 30 * dt);
+    if (now - S.lastHit > 6) S.armor = Math.min(100, S.armor + 4 * dt);
+    if (S.armor < 30 && now > S.nextBeep) { sfx.beep(); S.nextBeep = now + 0.8; }
+  }
+  S.hurtFlash *= Math.exp(-dt * 2.5);
+}
+
 /* ================= 推进器 / 发光 ================= */
 function thrusters(dt) {
-  const target = S.flying ? 0.55 + clamp(S.vel.length() / 40, 0, 1) * 0.7 + (key.Space ? 0.25 : 0) : S.takeoffT >= 0 ? 0.25 : 0;
+  const target = S.down ? 0 : S.flying ? 0.55 + clamp(S.vel.length() / 40, 0, 1) * 0.7 + (key.Space ? 0.25 : 0) : S.takeoffT >= 0 ? 0.25 : 0;
   S.thrust += (target - S.thrust) * damp(8, dt);
   const th = S.thrust;
   setGlow('glow_foot_L', 0.3 + th * 9);
@@ -1154,7 +1700,7 @@ function updateCamera(dt) {
   const want = _camDir.length();
   camRay.set(camState.pivot, _camDir.normalize());
   camRay.far = want;
-  const block = camRay.intersectObjects(camBlockers, false)[0];
+  const block = camRay.intersectObjects(nearBlockers(camState.pivot, want + 2), false)[0];
   if (block) camera.position.copy(camState.pivot).addScaledVector(_camDir, Math.max(0.5, block.distance - 0.3));
   if (S.shake > 0.01) {
     camera.position.add(randDir(_b).multiplyScalar(S.shake * 0.15));
@@ -1171,21 +1717,40 @@ function updateCamera(dt) {
 
 /* ================= HUD ================= */
 const $ = id => document.getElementById(id);
-const hud = { mode: $('mode'), alt: $('alt'), spd: $('spd'), cross: $('cross'), visor: $('visor'), fps: $('fps'), locks: $('locks'), snap: $('snap'), w: [0, 1, 2, 3, 4].map(i => $('w' + i)) };
+const hud = { mode: $('mode'), alt: $('alt'), spd: $('spd'), cross: $('cross'), visor: $('visor'), fps: $('fps'), locks: $('locks'), snap: $('snap'), w: [0, 1, 2, 3, 4].map(i => $('w' + i)),
+  hurt: $('hurt'), alert: $('alert'), armorBar: $('armorBar'), shield: $('shieldBar').firstChild, armor: $('armorBar').firstChild };
 // 模型 CC BY 4.0，必须署名
 $('credit').textContent = (suitRoot ? 'Iron Man Mark 85 by LLlypuk (CC BY 4.0, decimated & rigged)' : 'Placeholder suit')
   + (tankProto ? ' · T-72 by Nekis5_3D' : '') + ' · Environment: Poly Haven (CC0)';
 $('startMsg').textContent = 'Click to start · Esc to exit';
 $('startSub').textContent = suitRoot ? '' : 'Suit model not found — using placeholder';
 document.getElementById('bar').style.display = 'none';
+// 准星下方的短提示（肩炮锁定数量等），1.5 秒后淡出
+let noticeTimer = 0;
+function notice(text, color) {
+  const el = $('notice');
+  el.textContent = text;
+  el.style.color = color;
+  el.style.opacity = 1;
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { el.style.opacity = 0; }, 1500);
+}
 const lockEls = Array.from({ length: 4 }, () => hud.locks.appendChild(document.createElement('div')));
 let hudT = 0, frames = 0, fpsT = 0, fps = 0;
 function updateHud(dt) {
   frames++;
   if (now - fpsT > 0.5) { fps = Math.round(frames / (now - fpsT)); frames = 0; fpsT = now; autoQuality(); }
   hud.visor.style.opacity = 1 - ease(S.face);
+  const critical = S.armor < 30 && !S.down;
+  hud.shield.style.width = S.shield + '%';
+  hud.armor.style.width = S.armor + '%';
+  hud.armorBar.classList.toggle('low', S.armor < 30);
+  hud.hurt.style.opacity = Math.min(1, S.hurtFlash + (critical ? 0.25 + 0.2 * Math.sin(now * 8) : 0) + (S.down ? 0.6 : 0));
+  hud.alert.style.display = S.down || critical ? 'block' : 'none';
+  hud.alert.textContent = S.down ? 'SUIT OFFLINE · REBOOTING' : 'SUIT CRITICAL';
+  hud.alert.style.opacity = S.down || Math.sin(now * 8) > 0 ? 1 : 0.35;
   hud.snap.style.opacity = S.snapFlash;
-  hud.cross.classList.toggle('lock', !!aim.tank);
+  hud.cross.classList.toggle('lock', !!aim.target);
   const cds = [1 - S.repCd / 0.2, S.uni.state === 'idle' ? 1 - S.uni.cd / 4 : 0, S.laser.on ? 1 - S.laser.t / LASER_MAX : 1 - S.laser.cd / 3, 1 - S.gun.cd / 3.5,
     S.snap.state === 'idle' ? 1 - S.snap.cd / SNAP_CD : 0];
   cds.forEach((r, i) => {
@@ -1196,7 +1761,8 @@ function updateHud(dt) {
   lockEls.forEach((el, i) => {
     const t = locks[i];
     if (!t) { el.style.display = 'none'; return; }
-    const v = _v.copy(t.g.position).setY(1.2).project(camera);
+    _v.copy(t.g.position).y += t.aimY;
+    const v = _v.project(camera);
     if (v.z > 1) { el.style.display = 'none'; return; }
     el.style.display = 'block';
     el.style.left = (v.x * 0.5 + 0.5) * innerWidth + 'px';
@@ -1213,10 +1779,11 @@ function updateHud(dt) {
 
 /* ================= 音效（Web Audio 实时合成：不用音频文件，没有版权问题） ================= */
 const sfx = (() => {
-  let ac = null, out, noiseBuf, thr, rumble, wind, laserHum, sizzle, wasLasing = false, muted = false;
-  const right = new V3();
+  // 真实录制的音效（assets/sfx.pack：lentikula、Kenney 的 CC0 音效包）为主，没加载到时退回合成音
+  let ac = null, out, verb, noiseBuf, wind, thrLoop, rumLoop, laserSrc = null, wasLasing = false, muted = false;
+  const right = new V3(), smp = {};
   function init() {
-    if (ac) { ac.resume(); return; }
+    if (ac) { ac.resume(); return Promise.resolve(); }
     ac = new AudioContext();
     const comp = ac.createDynamicsCompressor();
     out = ac.createGain();
@@ -1225,27 +1792,72 @@ const sfx = (() => {
     noiseBuf = ac.createBuffer(1, ac.sampleRate * 2, ac.sampleRate);
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    thr = loopNoise('bandpass', 600, 0.7);
-    rumble = loopNoise('lowpass', 160, 1);
-    wind = loopNoise('lowpass', 380, 0.5);
-    sizzle = loopNoise('highpass', 5000, 0.7);
-    // 激光嗡鸣：两个略微失谐的振荡器
-    const f = ac.createBiquadFilter();
-    f.type = 'bandpass';
-    f.frequency.value = 2500;
-    f.Q.value = 0.8;
-    laserHum = ac.createGain();
-    laserHum.gain.value = 0;
-    for (const [type, hz] of [['sawtooth', 920], ['square', 1843]]) {
-      const o = ac.createOscillator();
-      o.type = type;
-      o.frequency.value = hz;
-      o.connect(f);
-      o.start();
+    // 混响：2.4 秒衰减的噪声当脉冲响应，给爆炸、光束、响指加空间感
+    const len = ac.sampleRate * 2.4, ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) {
+      const ch = ir.getChannelData(c);
+      for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
     }
-    f.connect(laserHum).connect(out);
+    verb = ac.createConvolver();
+    verb.buffer = ir;
+    const wet = ac.createGain();
+    wet.gain.value = 0.35;
+    verb.connect(wet).connect(out);
+    wind = loopNoise('lowpass', 380, 0.5);
+    return loadSamples();
   }
-  // 持续的噪声：推进器、低频轰鸣、风
+  async function loadSamples() {
+    const buf = await assetBuf.sfx;
+    if (!buf) return;
+    const hl = new DataView(buf).getUint32(0, true);
+    const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl)));
+    await Promise.all(Object.entries(head).map(async ([k, [o, l]]) => {
+      try { smp[k] = await ac.decodeAudioData(buf.slice(4 + hl + o, 4 + hl + o + l)); } catch (e) { console.warn('[sfx]', k, e); }
+    }));
+    thrLoop = loopSample('thruster');
+    rumLoop = loopSample('rumble');
+  }
+  function loopSample(name) {
+    if (!smp[name]) return null;
+    const s = ac.createBufferSource();
+    s.buffer = smp[name];
+    s.loop = true;
+    const g = ac.createGain();
+    g.gain.value = 0;
+    s.connect(g).connect(out);
+    s.start();
+    return { s, g };
+  }
+  // 播放一段录音；verbMix 是送进混响的比例
+  function play(name, { t = T(), gain = 1, rate = 1, dest = out, verbMix = 0, offset = 0, dur } = {}) {
+    const b = smp[name];
+    if (!b) return null;
+    const s = ac.createBufferSource();
+    s.buffer = b;
+    s.playbackRate.value = rate;
+    const g = ac.createGain();
+    g.gain.value = gain;
+    s.connect(g).connect(dest);
+    if (verbMix) {
+      const v = ac.createGain();
+      v.gain.value = verbMix;
+      g.connect(v).connect(verb);
+    }
+    s.start(t, offset, dur);
+    return { s, g };
+  }
+  const vary = (a, b) => a + Math.random() * (b - a);
+  const any = (...names) => names[Math.random() * names.length | 0];
+  // 同时进干声和混响的总线，给合成音用
+  function wetBus(level) {
+    const g = ac.createGain();
+    g.connect(out);
+    const v = ac.createGain();
+    v.gain.value = level;
+    g.connect(v).connect(verb);
+    return g;
+  }
+  // 持续的噪声（风声）
   function loopNoise(type, freq, q) {
     const src = ac.createBufferSource();
     src.buffer = noiseBuf;
@@ -1313,15 +1925,21 @@ const sfx = (() => {
     update(thrust, speed) {
       if (!ac) return;
       const t = T();
-      thr.g.gain.setTargetAtTime(thrust * 0.35, t, 0.08);
-      thr.f.frequency.setTargetAtTime(500 + thrust * 1400 + speed * 15, t, 0.1);
-      rumble.g.gain.setTargetAtTime(thrust * 0.5, t, 0.08);
+      if (thrLoop) {
+        thrLoop.g.gain.setTargetAtTime(thrust * 0.6, t, 0.08);
+        thrLoop.s.playbackRate.setTargetAtTime(0.85 + thrust * 0.25 + Math.min(speed / 40, 1) * 0.15, t, 0.15);
+      }
+      if (rumLoop) rumLoop.g.gain.setTargetAtTime(thrust * 0.35, t, 0.1);
       wind.g.gain.setTargetAtTime(0.03 + Math.min(speed / 40, 1) * 0.18, t, 0.3);
       wind.f.frequency.setTargetAtTime(300 + speed * 20, t, 0.3);
     },
     repulsor(p) {
       if (!ok()) return;
       const t = T();
+      if (play(any('rifle1', 'rifle4'), { gain: 0.9, rate: vary(0.95, 1.05), verbMix: 0.25 })) {
+        tone(t, 0.25, 'sine', 90, 40, 0.45, 0.003);
+        return;
+      }
       tone(t, 0.12, 'sawtooth', 700, 2200, 0.08);
       noise(t + 0.02, 0.25, 'highpass', 3000, 900, 0.5);
       tone(t + 0.02, 0.2, 'sine', 160, 45, 0.6);
@@ -1330,53 +1948,129 @@ const sfx = (() => {
     uniCharge() {
       if (!ok()) return;
       const t = T();
-      tone(t, 0.7, 'sawtooth', 150, 900, 0.12, 0.05);
-      tone(t, 0.7, 'sine', 300, 1800, 0.08, 0.05);
+      play('field', { gain: 0.5, rate: 0.6, verbMix: 0.3 });
+      tone(t, 0.7, 'sawtooth', 150, 900, 0.08, 0.05);
+      tone(t, 0.7, 'sine', 300, 1800, 0.06, 0.05);
     },
     uniFire() {
       if (!ok()) return;
       const t = T();
+      if (play('beam1', { gain: 1, rate: 0.75, dur: 1.9, verbMix: 0.4 })) {
+        play('lowboom1', { gain: 0.8, verbMix: 0.3 });
+        return;
+      }
       noise(t, 1.3, 'bandpass', 1400, 700, 0.6, 0.02, 0.8);
-      tone(t, 1.3, 'square', 110, 80, 0.12, 0.02);
       tone(t, 1.3, 'sine', 55, 40, 0.5, 0.02);
     },
     boom(p, s) {
       if (!ok()) return;
       const t = T(), d = spot(p);
+      if (play(any('crunch1', 'crunch3', 'crunch4'), { gain: 1, rate: vary(0.85, 1.05), dest: d, verbMix: 0.4 })) {
+        play('lowboom0', { gain: Math.min(1, 0.6 * s), dest: d, verbMix: 0.3 });
+        return;
+      }
       noise(t, 1.6 * s, 'lowpass', 1500, 80, 0.9, 0.003, 1, d);
       tone(t, 0.9, 'sine', 90, 30, 1.0, 0.003, d);
-      noise(t, 0.15, 'highpass', 2000, 1000, 0.5, 0.002, 1, d);
     },
+    // 小臂激光：按住时循环播放激光束录音，松手淡出
     laser(on) {
       if (!ac) return;
       const t = T();
-      if (on && !wasLasing && !muted) tone(t, 0.15, 'sawtooth', 3000, 800, 0.15, 0.002);
+      if (on && !wasLasing && !muted && smp.beam4) {
+        laserSrc = play('beam4', { gain: 0.0001, verbMix: 0.15 });
+        laserSrc.s.loop = true;
+        laserSrc.s.loopStart = 0.4;
+        laserSrc.s.loopEnd = 12;
+        laserSrc.g.gain.setTargetAtTime(0.75, t, 0.03);
+      }
+      if (!on && wasLasing && laserSrc) {
+        laserSrc.g.gain.setTargetAtTime(0.0001, t, 0.05);
+        laserSrc.s.stop(t + 0.3);
+        laserSrc = null;
+      }
       wasLasing = on;
-      laserHum.gain.setTargetAtTime(on ? 0.07 : 0, t, 0.02);
-      sizzle.g.gain.setTargetAtTime(on ? 0.12 : 0, t, 0.02);
+    },
+    cannon(p) {
+      if (!ok()) return;
+      const t = T(), d = spot(p);
+      if (play('lowboom1', { gain: 1, rate: 0.8, dest: d, verbMix: 0.35 })) {
+        play('crunch3', { gain: 0.6, rate: 1.2, dest: d });
+        return;
+      }
+      noise(t, 0.9, 'lowpass', 2500, 120, 1.0, 0.002, 1, d);
+      tone(t, 0.5, 'sine', 110, 35, 0.9, 0.002, d);
+    },
+    bolt(p) {
+      if (!ok()) return;
+      if (play(any('pistol3', 'pistol5'), { gain: 0.5, rate: vary(1, 1.12), dest: spot(p) })) return;
+      tone(T(), 0.18, 'square', 1400, 300, 0.25, 0.002, spot(p));
+    },
+    // 挨打：装甲是金属撞击声，护盾是能量场的声音
+    hit(armor) {
+      if (!ok()) return;
+      const t = T();
+      if (armor && play('metal1', { gain: 0.9, rate: 0.8, verbMix: 0.2 })) {
+        play('lowboom1', { gain: 0.4, rate: 1.4 });
+        return;
+      }
+      if (!armor && play('field', { gain: 0.6, rate: vary(1.1, 1.3) })) return;
+      noise(t, 0.25, 'bandpass', 3200, 1500, 0.6, 0.001, 3);
+      tone(t, 0.3, 'sine', 90, 50, 0.6, 0.001);
+    },
+    beep() {
+      if (!ok()) return;
+      tone(T(), 0.12, 'square', 880, 880, 0.08, 0.002);
+    },
+    powerDown() {
+      if (!ok()) return;
+      const t = T();
+      tone(t, 1.6, 'sawtooth', 600, 40, 0.18, 0.01);
+      tone(t, 1.6, 'sine', 300, 30, 0.3, 0.01);
+    },
+    powerUp() {
+      if (!ok()) return;
+      const t = T();
+      tone(t, 1.0, 'sine', 120, 900, 0.18, 0.05);
+      tone(t, 1.0, 'triangle', 240, 1800, 0.06, 0.05);
     },
     gun() {
       if (!ok()) return;
       const t = T();
+      if (play('laserLarge0', { gain: 0.6, rate: vary(1.45, 1.7) })) {
+        tone(t, 0.08, 'sine', 160, 70, 0.3, 0.002);
+        return;
+      }
       noise(t, 0.06, 'highpass', 2500, 1200, 0.45, 0.001);
       tone(t, 0.05, 'square', 220, 90, 0.15, 0.001);
     },
-    // 宝石依次亮起：大三和弦往上走
-    stone(i) {
+    // 宝石亮起时的能量聚集（真实录音）；没加载到时退回合成的上行音阶
+    snapCharge() {
       if (!ok()) return;
-      const t = T(), f = 523.25 * Math.pow(2, [0, 4, 7, 11, 14, 19][i] / 12);
-      tone(t, 1.2, 'sine', f, f, 0.12, 0.01);
-      tone(t, 0.8, 'triangle', f * 2, f * 2, 0.04, 0.01);
+      play('snapCharge', { gain: 1 });
     },
+    stone(i) {
+      if (!ok() || smp.snapCharge) return;
+      const t = T(), f = 523.25 * Math.pow(2, [0, 4, 7, 11, 14, 19][i] / 12), bus = wetBus(0.9);
+      tone(t, 1.4, 'sine', f, f, 0.1, 0.01, bus);
+      tone(t, 0.9, 'triangle', f * 2, f * 2, 0.03, 0.01, bus);
+    },
+    // 响指：用户选的 A 版（金属指响 → 0.38 秒后低频冲击、能量扫过，已含混响，不含合成和弦）；
+    // 没加载到时退回合成版
     snap() {
       if (!ok()) return;
-      const t = T();
-      noise(t, 0.04, 'highpass', 4000, 3000, 0.9, 0.001);
-      noise(t + 0.05, 2.5, 'lowpass', 2000, 60, 0.9, 0.01);
-      tone(t + 0.05, 2.5, 'sine', 70, 25, 1.0, 0.01);
+      if (play('snapA', { gain: 1 })) return;
+      const t = T(), bus = wetBus(0.8);
+      noise(t, 0.035, 'highpass', 5000, 3500, 1.0, 0.0008, 0.7, bus);
+      noise(t, 0.05, 'bandpass', 1800, 1200, 0.5, 0.0008, 2, bus);
+      play('lowboom0', { t: t + 0.04, gain: 1, rate: 0.8, verbMix: 0.6 });
+      play('field', { t: t + 0.04, gain: 0.6, rate: 0.5, verbMix: 0.8 });
+      if (!smp.lowboom0) {
+        noise(t + 0.05, 2.5, 'lowpass', 2000, 60, 0.9, 0.01);
+        tone(t + 0.05, 2.5, 'sine', 70, 25, 1.0, 0.01);
+      }
       for (const k of [0, 7, 12, 19]) {
         const f = 392 * Math.pow(2, k / 12);
-        tone(t + 0.05, 2.0, 'sine', f, f, 0.06, 0.05);
+        tone(t + 0.1, 2.6, 'sine', f, f, 0.05, 0.08, bus);
       }
     },
     dust(p) {
@@ -1386,22 +2080,25 @@ const sfx = (() => {
     takeoff() {
       if (!ok()) return;
       const t = T();
-      noise(t, 0.8, 'lowpass', 300, 1800, 0.7, 0.02);
-      tone(t, 0.6, 'sine', 60, 120, 0.5, 0.02);
+      play('lowboom1', { gain: 0.6, rate: 1.3, verbMix: 0.2 });
+      noise(t, 0.8, 'lowpass', 300, 1800, 0.5, 0.02);
     },
     land(k) {
       if (!ok()) return;
       const t = T();
+      if (play('metal1', { gain: 0.5 + k * 0.5, rate: 0.55, verbMix: 0.2 })) {
+        play('lowboom1', { gain: 0.3 + k * 0.7, rate: 1.1 });
+        return;
+      }
       tone(t, 0.3 + k * 0.3, 'sine', 120, 35, 0.4 + k * 0.6, 0.002);
       noise(t, 0.2 + k * 0.6, 'lowpass', 1200, 100, 0.3 + k * 0.6, 0.002);
-      noise(t, 0.08, 'bandpass', 2400, 1800, 0.25, 0.001, 3);
     },
-    // 金属靴子踩地：低频闷响 + 一点金属声
+    // 金属靴子踩地
     step(k) {
       if (!ok()) return;
       const t = T();
+      if (play(any('metal2', 'metal4'), { gain: 0.05 + 0.12 * k, rate: vary(0.45, 0.55) })) return;
       tone(t, 0.12, 'sine', 140, 60, 0.18 * k, 0.002);
-      noise(t, 0.06, 'bandpass', 2600, 1600, 0.1 * k, 0.001, 4);
     },
     servo() {
       if (!ok()) return;
@@ -1433,8 +2130,11 @@ addEventListener('resize', resize);
 resize();
 
 const clock = new THREE.Clock();
+let idleTick = 0;
 function frame() {
   requestAnimationFrame(frame);
+  // 停在开始画面（没进游戏 / 按了 Esc）时省电：只渲染约 1/6 的帧
+  if (startEl.style.display !== 'none' && ++idleTick % 6) return;
   const dt = Math.min(clock.getDelta(), 0.05);
   now += dt;
 
@@ -1449,11 +2149,10 @@ function frame() {
   sfx.update(S.thrust, S.flying ? S.vel.length() : 0);
   updateSnap(dt);
 
-  for (const t of tanks) {
-    if (t.dustAt && now >= t.dustAt) { t.dustAt = 0; dustTank(t); }
-    if (!t.alive && now > t.respawn) { t.alive = true; t.hp = 3; t.g.visible = true; }
-    t.turret.rotation.y = Math.sin(now * 0.3 + t.phase) * 0.8;
-  }
+  updateSuit(dt);
+  updateTanks(dt);
+  updateDrones(dt);
+  updateProjectiles(dt);
   for (const m of beams) {
     if (!m.visible) continue;
     const k = (now - m.userData.born) / m.userData.life;
@@ -1472,6 +2171,10 @@ function frame() {
   if (pDirty) {
     for (const n of ['position', 'aVel', 'aInfo']) pGeo.attributes[n].needsUpdate = true;
     pDirty = false;
+  }
+  if (sDirty) {
+    for (const n of ['position', 'aVel', 'aInfo']) sGeo.attributes[n].needsUpdate = true;
+    sDirty = false;
   }
   updateHud(dt);
   composer.render();
