@@ -20,6 +20,7 @@ canvas{display:block}
 .w em{float:right;font-style:normal;opacity:.6;font-size:11px}
 .w u{display:block;height:3px;margin-top:7px;background:#8fe3ff;transform-origin:left}
 .w.cd u{background:#557a88}
+#dmarks div{position:absolute;width:12px;height:12px;margin:-6px 0 0 -6px;border:2px solid #ff5a3c;transform:rotate(45deg);display:none;box-sizing:border-box}
 #locks div{position:absolute;width:34px;height:34px;margin:-17px 0 0 -17px;border:1.5px solid #ffb347;display:none;box-sizing:border-box}
 #help{position:absolute;right:24px;top:24px;font-size:12px;line-height:1.9;padding:12px 16px;border:1px solid rgba(140,225,255,.3);background:rgba(5,20,30,.4)}
 #help kbd{display:inline-block;min-width:56px;color:#e8c46a;font-family:inherit}
@@ -56,6 +57,7 @@ canvas{display:block}
   </div>
   <div id="cross"></div>
   <div id="locks"></div>
+  <div id="dmarks"></div>
   <div id="stats">
     <div class="t">MARK 85 · <span id="mode">GROUND</span></div>
     <div>ALT<b id="alt">0</b>m</div>
@@ -637,7 +639,12 @@ const sMat = new THREE.ShaderMaterial({
     void main(){
       float d = length(gl_PointCoord - 0.5) * 2.0;
       if (d > 1.0) discard;
-      float a = pow(1.0 - d, 1.2) * (1.0 - vT) * min(1.0, vT * 8.0) * 0.85;
+      // 边缘按角度起伏，不是一个个正圆球
+      vec2 q = gl_PointCoord - 0.5;
+      float edge = 1.0 + 0.25 * sin(atan(q.y, q.x) * 5.0 + vT * 9.0) * sin(atan(q.y, q.x) * 3.0 - vT * 5.0);
+      d *= edge;
+      if (d > 1.0) discard;
+      float a = pow(1.0 - d, 1.6) * (1.0 - vT) * min(1.0, vT * 8.0) * 0.7;
       gl_FragColor = vec4(vec3(0.025, 0.022, 0.02) + vT * 0.07, a);
     }`,
 });
@@ -752,7 +759,7 @@ const S = {
   snap: { state: 'idle', t: 0, cd: 0 }, snapW: 0,
   armor: 100, shield: 100, lastHit: -9, invuln: 0, hurtFlash: 0, down: false, downT: 0, nextBeep: 0,
   thrust: 0, emitAcc: 0, shake: 0,
-  faceYaw: undefined, turnStep: 0,   // 设了就固定朝这个方向开火（录演示视频时镜头绕到正面用），平时跟着镜头
+  faceYaw: undefined, turnStep: 0, uniPitch: 0,   // 设了就固定朝这个方向开火（录演示视频时镜头绕到正面用），平时跟着镜头
 };
 let camYaw = 0, camPitch = -0.1, locked = false;
 const camState = { dist: 4, pivot: new V3(0, 1.55, 0) };
@@ -1020,7 +1027,8 @@ function pose(dt) {
   // 两腿分开时胯部略沉；只取理论值的三成（约 2~3 厘米），否则头会一颠一颠
   suit.off.hips.y = -c * 0.43 - walk * 0.3 * suit.legLen * (1 - Math.cos(amp * sw)) + fly * Math.sin(t * 2.2) * 0.025;
   // 盔甲很重：胯和上身只轻微扭转，跑步时身体前倾
-  B.hips.set(S.tilt + c * 0.45 + run * 0.1, sw * 0.035 * walk, S.roll);
+  // 胸口光束：整个身体俯仰对准目标（抵消下面挺胸的后仰），光束才能从胸口正前方笔直射出
+  B.hips.set(S.tilt + c * 0.45 + run * 0.1 + u * (S.uniPitch + 0.3), sw * 0.035 * walk, S.roll);
   const landLean = S.landDeep ? c * 0.62 : 0;
   B.spine.set(br * 0.012 - u * 0.18 + landLean, -sw * 0.02 * walk, 0);
   B.chest.set(br * 0.015 - u * 0.12 + run * 0.04 + landLean, -sw * 0.025 * walk, 0);
@@ -1131,14 +1139,52 @@ function damage(t, amt) {
   explosion(_p.copy(t.g.position).setY(t.g.position.y + 1.2), 2.2);
 }
 
+// 掌心炮的能量弹：一团短而亮的光弹从掌心飞向目标（不是一整条光柱），到了再炸开
+const REP_SPEED = 160;
+const repBolts = Array.from({ length: 6 }, () => {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(beamGeo, uniMat(new THREE.Color(5, 6, 7)));
+  const glow = new THREE.Mesh(beamGeo, uniMat(new THREE.Color(0.8, 1.8, 2.6)));
+  glow.material.opacity = 0.5;
+  core.scale.set(0.035, 1, 0.035);
+  glow.scale.set(0.11, 1, 0.11);
+  g.add(core, glow);
+  g.visible = false;
+  g.traverse(o => o.frustumCulled = false);
+  scene.add(g);
+  return { g, from: new V3(), to: new V3(), dist: 0, t: 0, live: false };
+});
+function updateRepBolts(dt) {
+  for (const b of repBolts) {
+    if (!b.live) continue;
+    b.t += REP_SPEED * dt;
+    const head = Math.min(b.t, b.dist), tail = Math.max(0, b.t - 2.8);
+    _d.copy(b.to).sub(b.from).normalize();
+    b.g.position.copy(b.from).addScaledVector(_d, (head + tail) / 2);
+    b.g.quaternion.setFromUnitVectors(UP, _d);
+    b.g.scale.set(1, Math.max(0.01, head - tail), 1);
+    b.g.visible = true;
+    if (b.t >= b.dist) {
+      b.live = false;
+      b.g.visible = false;
+      for (let i = 0; i < 16; i++) emit(b.to, randDir(_v).multiplyScalar(3 + rnd() * 5), 0.35, 0.25, 3);
+      for (let i = 0; i < 6; i++) emit(b.to, randDir(_v).multiplyScalar(6 + rnd() * 6), 0.5, 0.08, 2);
+      flash(b.to, COL.cyan, 30);
+    }
+  }
+}
 function fireRepulsor() {
   const from = suit.emit.emit_palm_R.getWorldPosition(new V3());
   const wall = clipShot(from, aim.point);
   const to = wall ?? aim.point.clone();
-  beam(from, to, COL.repulsor, 0.06, 0.14);
-  for (let i = 0; i < 16; i++) emit(to, randDir(_v).multiplyScalar(3 + rnd() * 5), 0.35, 0.25, 3);
-  for (let i = 0; i < 6; i++) emit(to, randDir(_v).multiplyScalar(6 + rnd() * 6), 0.5, 0.08, 2);
-  flash(to, COL.cyan, 40);
+  const b = repBolts.find(o => !o.live) || repBolts[0];
+  Object.assign(b, { dist: from.distanceTo(to), t: 0, live: true });
+  b.from.copy(from);
+  b.to.copy(to);
+  // 掌心一圈能量冲击
+  _d.copy(to).sub(from).normalize();
+  for (let i = 0; i < 14; i++) { randDir(_v); _v.addScaledVector(_d, -_v.dot(_d)).setLength(2.5); emit(from, _v, 0.18, 0.12, 3); }
+  flash(from, COL.cyan, 12);
   S.recoil = 1;
   S.palmFlash = 1;
   sfx.repulsor(to);
@@ -1182,8 +1228,13 @@ function weapons(dt) {
   const wantL = now < S.aimLUntil ? 1 : 0;
   S.aimL += (wantL - S.aimL) * damp(wantL ? 14 : 4, dt);
 
-  // 胸口光束：蓄力 0.7 秒，发射 1.3 秒
+  // 胸口光束：蓄力 0.7 秒，发射 1.3 秒；蓄力时身体就开始俯仰对准准星
   const U = S.uni;
+  {
+    const r0 = suit.emit.emit_reactor.getWorldPosition(_p);
+    const want = U.state === 'idle' ? 0 : Math.atan2(r0.y - aim.point.y, Math.hypot(aim.point.x - r0.x, aim.point.z - r0.z));
+    S.uniPitch += (clamp(want, -0.8, 1.2) - S.uniPitch) * damp(8, dt);
+  }
   U.cd = Math.max(0, U.cd - dt);
   const reactor = suit.emit.emit_reactor.getWorldPosition(new V3());
   let reactorGlow = 1.6;
@@ -1198,8 +1249,15 @@ function weapons(dt) {
   } else if (U.state === 'fire') {
     U.t += dt;
     reactorGlow = 30 + Math.sin(now * 50) * 4;
-    const wall = clipShot(reactor, aim.point);
-    const to = wall ?? aim.point;
+    // 光束沿胸口正前方射出，打到什么算什么
+    const dir = _a.set(0, 1, 0).applyQuaternion(suit.emit.emit_reactor.getWorldQuaternion(_q));
+    uniRay.set(reactor, dir);
+    const list = [...rayMeshes];
+    for (const t of enemies()) if (t.alive) list.push(t.g);
+    const hit = uniRay.intersectObjects(list, true)[0];
+    const to = hit ? hit.point : reactor.clone().addScaledVector(dir, 300);
+    let hitTarget = null;
+    for (let o = hit?.object; o; o = o.parent) if (o.userData.target) { hitTarget = o.userData.target; break; }
     _d.copy(to).sub(reactor);
     const len = _d.length();
     uniBeam.visible = true;
@@ -1210,7 +1268,7 @@ function weapons(dt) {
     for (let i = 0; i < 4; i++) emit(to, randDir(_v).multiplyScalar(4 + rnd() * 6), 0.4, 0.4, 3);
     for (let i = 0; i < 2; i++) emit(to, randDir(_v).multiplyScalar(8 + rnd() * 8), 0.6, 0.1, 2);
     flash(to, COL.cyan, 150);
-    if (aim.target && !wall) damage(aim.target, 99);
+    if (hitTarget) damage(hitTarget, 99);
     if (S.flying) S.vel.addScaledVector(_d, -4 * dt);
     S.shake = Math.max(S.shake, 0.25);
     if (U.t >= 1.3) { U.state = 'idle'; U.cd = 4; uniBeam.visible = false; }
@@ -1237,7 +1295,7 @@ function weapons(dt) {
     // 命中点：火星四溅 + 熔融发红
     for (let i = 0; i < 3; i++) emit(to, randDir(_v).multiplyScalar(5 + rnd() * 7).add(_b.set(0, 2, 0)), 0.5 + rnd() * 0.4, 0.06, 2);
     emit(to, randDir(_v).multiplyScalar(0.6), 0.25, 0.35, 1);
-    flash(to, LASER_COL, 60);
+    flash(to, LASER_COL, 14);
     if (aim.target && !wall) damage(aim.target, 1.6 * dt);
   }
   laserBeam.visible = lasing;
@@ -1276,6 +1334,8 @@ function weapons(dt) {
 }
 
 /* ================= 响指（无限宝石） ================= */
+const uniRay = new THREE.Raycaster();
+uniRay.far = 300;
 const SNAP_CD = 20;
 S.snapFlash = 0;
 function startSnap() {
@@ -1357,6 +1417,9 @@ const droneMat = {
   dark: new THREE.MeshStandardMaterial({ color: 0x111214, metalness: 0.6, roughness: 0.5 }),
   rotor: new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.35, depthWrite: false }),
   eye: new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2a1a, emissiveIntensity: 5 }),
+  navRed: new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 0.3, 0.2) }),
+  navGreen: new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 5, 0.8) }),
+  strobe: new THREE.MeshBasicMaterial({ color: new THREE.Color(8, 8, 8) }),
 };
 function makeDrone() {
   const g = new THREE.Group();
@@ -1379,14 +1442,20 @@ function makeDrone() {
     r.castShadow = false;
     rotors.push(r);
   }
+  // 航行灯：左红右绿，机腹一盏白色频闪，远处也看得见
+  add(new THREE.SphereGeometry(0.06, 8, 6), droneMat.navRed, 0.6, 0.06, 0.6).castShadow = false;
+  add(new THREE.SphereGeometry(0.06, 8, 6), droneMat.navGreen, -0.6, 0.06, 0.6).castShadow = false;
+  const strobe = add(new THREE.SphereGeometry(0.07, 8, 6), droneMat.strobe, 0, -0.14, -0.1);
+  strobe.castShadow = false;
   g.userData.rotors = rotors;
+  g.userData.strobe = strobe;
   return g;
 }
 const drones = Array.from({ length: 5 }, (_, i) => {
   const g = makeDrone();
   g.visible = false;
   scene.add(g);
-  const d = { kind: 'drone', g, hp: 1, alive: false, respawn: 6 + i * 3, aimY: 0, vel: new V3(),
+  const d = { kind: 'drone', g, hp: 1, alive: false, respawn: 4 + i * 2.5, aimY: 0, vel: new V3(),
     ang: rnd() * Math.PI * 2, radius: 16 + rnd() * 10, alt: 4 + rnd() * 6, reload: 0 };
   g.userData.target = d;
   return d;
@@ -1555,7 +1624,7 @@ function updateTanks(dt) {
     if (t.wreck) {
       const top = _e3.copy(t.g.position).setY(t.g.position.y + 2.2);
       const k = clamp((t.wreckUntil - now) / 14, 0, 1);
-      if (rnd() < dt * 30 * k) emitSmoke(top.clone().add(randDir(_v).multiplyScalar(0.6)), _v.set(0, 1.5, 0), 4 + rnd() * 2, 2 + rnd() * 1.2);
+      if (rnd() < dt * 55 * k) emitSmoke(top.clone().add(randDir(_v).multiplyScalar(0.7)), _v.set((rnd() - 0.5) * 0.8, 1.4 + rnd() * 0.6, (rnd() - 0.5) * 0.8), 3.5 + rnd() * 2.5, 0.9 + rnd() * 0.7);
       if (k > 0.55 && rnd() < dt * 14) emit(top, randDir(_v).multiplyScalar(0.6).add(_e2.set(0, 1.2, 0)), 0.5 + rnd() * 0.4, 0.5, 1);
       if (now > t.wreckUntil) { t.wreck = false; t.g.visible = false; }
     }
@@ -1578,7 +1647,8 @@ function updateTanks(dt) {
 
 // ---- 无人机：从远处飞来，绕着钢铁侠盘旋射击；打下来几秒后从远处补一架 ----
 function spawnDrone(d) {
-  const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 140, z = S.pos.z + Math.cos(a) * 140;
+  if (!drones.some(o => o.alive)) notice('DRONES INBOUND', '#ff5a3c');
+  const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 110, z = S.pos.z + Math.cos(a) * 110;
   d.g.position.set(x, terrainH(x, z) + 30, z);
   d.vel.set(0, 0, 0);
   Object.assign(d, { hp: 1, alive: true, reload: 4 + rnd() * 3 });
@@ -1608,6 +1678,7 @@ function updateDrones(dt) {
     d.g.position.addScaledVector(d.vel, dt);
     d.g.lookAt(pc);
     for (const r of d.g.userData.rotors) r.rotation.y += dt * 40;
+    d.g.userData.strobe.visible = (now * 1.6 + d.ang) % 1 < 0.12;
     d.reload -= dt;
     if (d.reload <= 0 && d.g.position.distanceTo(pc) < 70 && !S.down) { fireBolt(d); d.reload = 1.4 + rnd() * 1.8; }
   }
@@ -1735,6 +1806,8 @@ function notice(text, color) {
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => { el.style.opacity = 0; }, 1500);
 }
+// 无人机在屏幕上的红色菱形标记（160 米内）
+const droneEls = Array.from({ length: 5 }, () => $('dmarks').appendChild(document.createElement('div')));
 const lockEls = Array.from({ length: 4 }, () => hud.locks.appendChild(document.createElement('div')));
 let hudT = 0, frames = 0, fpsT = 0, fps = 0;
 function updateHud(dt) {
@@ -1756,6 +1829,15 @@ function updateHud(dt) {
   cds.forEach((r, i) => {
     hud.w[i].lastChild.style.transform = `scaleX(${clamp(r, 0, 1)})`;
     hud.w[i].classList.toggle('cd', r < 1);
+  });
+  drones.forEach((d, i) => {
+    const el = droneEls[i];
+    if (!d.alive || d.g.position.distanceTo(S.pos) > 160) { el.style.display = 'none'; return; }
+    const v = _v.copy(d.g.position).project(camera);
+    if (v.z > 1 || Math.abs(v.x) > 1.05 || Math.abs(v.y) > 1.05) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.style.left = (v.x * 0.5 + 0.5) * innerWidth + 'px';
+    el.style.top = (-v.y * 0.5 + 0.5) * innerHeight + 'px';
   });
   const locks = S.gunT > 0.3 ? lockTargets() : [];
   lockEls.forEach((el, i) => {
@@ -1780,7 +1862,7 @@ function updateHud(dt) {
 /* ================= 音效（Web Audio 实时合成：不用音频文件，没有版权问题） ================= */
 const sfx = (() => {
   // 真实录制的音效（assets/sfx.pack：lentikula、Kenney 的 CC0 音效包）为主，没加载到时退回合成音
-  let ac = null, out, verb, noiseBuf, wind, thrLoop, rumLoop, laserSrc = null, wasLasing = false, muted = false;
+  let ac = null, out, verb, noiseBuf, wind, jet, thrLoop, laserSrc = null, wasLasing = false, muted = false;
   const right = new V3(), smp = {};
   function init() {
     if (ac) { ac.resume(); return Promise.resolve(); }
@@ -1804,7 +1886,38 @@ const sfx = (() => {
     wet.gain.value = 0.35;
     verb.connect(wet).connect(out);
     wind = loopNoise('lowpass', 380, 0.5);
+    jet = makeJet();
     return loadSamples();
+  }
+  // 推进器喷流：左右两路互不相关的宽频气流 + 中低频气流主体 + 超低频隆隆 + 冲刺时的高压嘶嘶声。
+  // 推力只改变厚度和亮度，不改变音高（音高随速度升降是马达的特征，听着廉价）
+  function makeJet() {
+    const brown = ac.createBuffer(1, ac.sampleRate * 4, ac.sampleRate), b = brown.getChannelData(0);
+    let last = 0;
+    for (let i = 0; i < b.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; b[i] = last * 3.5; }
+    const layer = (buf, type, freq, q, pan, offset) => {
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const f = ac.createBiquadFilter();
+      f.type = type;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ac.createGain();
+      g.gain.value = 0;
+      const p = ac.createStereoPanner();
+      p.pan.value = pan;
+      src.connect(f).connect(g).connect(p).connect(out);
+      src.start(0, offset);
+      return { f, g };
+    };
+    return {
+      roarL: layer(noiseBuf, 'lowpass', 900, 0.5, -0.6, 0),
+      roarR: layer(noiseBuf, 'lowpass', 900, 0.5, 0.6, 0.97),
+      body: layer(brown, 'lowpass', 400, 0.7, 0, 0.3),
+      sub: layer(brown, 'lowpass', 90, 0.9, 0, 1.7),
+      hiss: layer(noiseBuf, 'highpass', 5500, 0.7, 0, 0.5),
+    };
   }
   async function loadSamples() {
     const buf = await assetBuf.sfx;
@@ -1815,7 +1928,6 @@ const sfx = (() => {
       try { smp[k] = await ac.decodeAudioData(buf.slice(4 + hl + o, 4 + hl + o + l)); } catch (e) { console.warn('[sfx]', k, e); }
     }));
     thrLoop = loopSample('thruster');
-    rumLoop = loopSample('rumble');
   }
   function loopSample(name) {
     if (!smp[name]) return null;
@@ -1925,11 +2037,16 @@ const sfx = (() => {
     update(thrust, speed) {
       if (!ac) return;
       const t = T();
-      if (thrLoop) {
-        thrLoop.g.gain.setTargetAtTime(thrust * 0.6, t, 0.08);
-        thrLoop.s.playbackRate.setTargetAtTime(0.85 + thrust * 0.25 + Math.min(speed / 40, 1) * 0.15, t, 0.15);
+      const sp = Math.min(speed / 40, 1), bright = 700 + thrust * 1800 + sp * 1800;
+      for (const k of ['roarL', 'roarR']) {
+        jet[k].g.gain.setTargetAtTime(thrust * 0.32, t, 0.12);
+        jet[k].f.frequency.setTargetAtTime(bright, t, 0.2);
       }
-      if (rumLoop) rumLoop.g.gain.setTargetAtTime(thrust * 0.35, t, 0.1);
+      jet.body.g.gain.setTargetAtTime(thrust * 0.55, t, 0.12);
+      jet.sub.g.gain.setTargetAtTime(thrust * 0.9, t, 0.15);
+      jet.hiss.g.gain.setTargetAtTime(Math.max(0, sp - 0.4) * 0.22, t, 0.25);
+      // 原来的喷气录音只当一点纹理，不再变调
+      if (thrLoop) thrLoop.g.gain.setTargetAtTime(thrust * 0.22, t, 0.12);
       wind.g.gain.setTargetAtTime(0.03 + Math.min(speed / 40, 1) * 0.18, t, 0.3);
       wind.f.frequency.setTargetAtTime(300 + speed * 20, t, 0.3);
     },
@@ -2150,6 +2267,7 @@ function frame() {
   updateSnap(dt);
 
   updateSuit(dt);
+  updateRepBolts(dt);
   updateTanks(dt);
   updateDrones(dt);
   updateProjectiles(dt);
