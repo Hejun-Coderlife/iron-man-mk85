@@ -89,7 +89,7 @@ canvas{display:block}
   </div>
   <div id="weap">
     <div class="w" id="w0">Repulsor<em>LMB</em><u></u></div>
-    <div class="w" id="w1">Unibeam<em>RMB</em><u></u></div>
+    <div class="w" id="w1">Unibeam<em>RMB / R</em><u></u></div>
     <div class="w" id="w2">Laser<em>Q</em><u></u></div>
     <div class="w" id="w3">Shoulder Guns<em>E</em><u></u></div>
     <div class="w" id="w4">Snap<em>F</em><u></u></div>
@@ -103,7 +103,7 @@ canvas{display:block}
     <div><kbd>⌥ Option</kbd>Dodge (Alt on Windows · or double-tap WASD)</div>
     <div><kbd>Mouse</kbd>Aim (flight follows crosshair)</div>
     <div><kbd>LMB</kbd>Repulsor (hold to auto-fire)</div>
-    <div><kbd>RMB</kbd>Unibeam</div>
+    <div><kbd>RMB / R</kbd>Unibeam (chest beam)</div>
     <div><kbd>Q</kbd>Forearm laser (hold)</div>
     <div><kbd>E</kbd>Shoulder guns · auto-lock</div>
     <div><kbd>F</kbd>Snap (Infinity Stones)</div>
@@ -363,6 +363,8 @@ function terrainH(x, z) {
 }
 
 const rayMeshes = [], camBlockers = [];
+// 坦克车身检测用（见 tankHullBlocked）：车身四个角 + 中心
+const hullRay = new THREE.Raycaster(), HULL = [[0, 0], [1.6, 3.0], [-1.6, 3.0], [1.6, -3.0], [-1.6, -3.0]], HULL_DOWN = new V3(0, -1, 0), HULL_P = new V3();
 // 地形有沙地、岩石两种材质，加载后会拆成 terrain 底下的两个子网格
 const TERRAIN_NAMES = CITY ? ['ground', 'streets'] : ['terrain'];
 const isTerrain = o => TERRAIN_NAMES.includes(o.name) || TERRAIN_NAMES.includes(o.parent?.name);
@@ -574,6 +576,7 @@ function placeOnRoad(t, r0, r1, from = HOME) {
     if (!n.nb.length || (k < 1500 && (d < r0 || d > r1))) continue;
     if (k < 1900 && tanks.some(o => o !== t && o.g.position.distanceTo(_p.set(n.x, 0, n.z)) < 15)) continue;
     const next = n.nb[Math.floor(rnd() * n.nb.length)];
+    if (k < 1900 && tankHullBlocked(n.x, n.z, Math.atan2(NAV[next].x - n.x, NAV[next].z - n.z), 0)) continue;
     t.g.position.set(n.x, 0, n.z);
     t.g.rotation.y = Math.atan2(NAV[next].x - n.x, NAV[next].z - n.z);
     Object.assign(t, { node: next, prev: i });
@@ -1079,6 +1082,8 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'KeyE') fireGuns();
   if (e.code === 'KeyF') startSnap();
+  // 胸口光束也可以按 R（Mac 触控板点右键不方便）
+  if (e.code === 'KeyR') startUnibeam();
   if (e.code === 'KeyB' && !CITY && boss && !boss.alive && !boss.g.visible) spawnBoss();
   if (e.code === 'KeyB' && CITY && ultron && !ultron.alive && !ultron.g.visible) spawnUltron();
   if (e.code === 'KeyH') helpEl.style.display = helpEl.style.display === 'none' ? '' : 'none';
@@ -1900,8 +1905,9 @@ const drones = Array.from({ length: MAX_DRONES }, (_, i) => {
 });
 
 // ---- 波次：每撑过 60 秒升一波，无人机多一架（最多 12 架），所有敌人开火更快 ----
-const activeDrones = () => Math.min(MAX_DRONES, 7 + S.wave);
-const waveMul = () => Math.max(0.5, Math.pow(0.88, S.wave - 1));
+// 无人机：第 1 波 4 架，每波多 1 架，最多 8 架；开火间隔每波缩短 7%，最多缩到 70%
+const activeDrones = () => Math.min(8, 3 + S.wave);
+const waveMul = () => Math.max(0.7, Math.pow(0.93, S.wave - 1));
 function updateWave() {
   if (calm()) return;
   if (now > S.nextWave) {
@@ -2087,7 +2093,7 @@ function respawnTank(t) {
   else for (let k = 0; k < 20; k++) {
     const a = rnd() * Math.PI * 2, r = 170 + rnd() * 20;
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
-    if (nearBlockers(_e3.set(x, 1, z), 6).length) continue;
+    if (tankHullBlocked(x, z, Math.atan2(-x, -z), terrainH(x, z))) continue;
     t.g.position.set(x, terrainH(x, z), z);
     t.g.rotation.y = Math.atan2(-x, -z);
     break;
@@ -2097,6 +2103,30 @@ function respawnTank(t) {
   t.turret.position.y = t.turretY0;
   Object.assign(t, { alive: true, wreck: false, hp: TANK_HP, reload: 3 + rnd() * 3, speed: 0 });
   t.g.visible = true;
+}
+// 车身会不会压到墙：车身四个角 + 中心，从上往下打射线，碰到房子/楼/石头（不是地面）就算压到
+function tankHullBlocked(x, z, yaw, y) {
+  const c = Math.cos(yaw), sn = Math.sin(yaw);
+  const near = nearBlockers(HULL_P.set(x, y, z), 6);
+  if (!near.length) return false;
+  for (const [dx, dz] of HULL) {
+    hullRay.set(HULL_P.set(x + dx * c + dz * sn, y + 8, z - dx * sn + dz * c), HULL_DOWN);
+    hullRay.far = 7.3;
+    if (hullRay.intersectObjects(near, false).length) return true;
+  }
+  return false;
+}
+// 按 want 方向转、按 speedT 往前开；会压到墙就不动（转向也不转进墙里），返回这一帧有没有被挡住
+function moveTank(t, want, speedT, turnRate, dt) {
+  const p = t.g.position, h0 = t.g.rotation.y;
+  const h1 = h0 + clamp(angDiff(want, h0), -turnRate * dt, turnRate * dt);
+  if (!tankHullBlocked(p.x, p.z, h1, p.y)) t.g.rotation.y = h1;
+  t.speed += (speedT - t.speed) * damp(1.5, dt);
+  const h = t.g.rotation.y;
+  const nx = p.x + Math.sin(h) * t.speed * dt, nz = p.z + Math.cos(h) * t.speed * dt;
+  if (t.speed > 0.05 && tankHullBlocked(nx, nz, h, p.y)) { t.speed = 0; return true; }
+  p.x = nx; p.z = nz;
+  return false;
 }
 // 纽约：沿路网开，到路口挑离钢铁侠近的方向（带点随机，不掉头）；靠近了停下来开炮
 function driveTankCity(t, pc, dt) {
@@ -2125,14 +2155,11 @@ function driveTankCity(t, pc, dt) {
     const ox = o.g.position.x - p.x, oz = o.g.position.z - p.z;
     if (ox * ox + oz * oz < 144 && ox * Math.sin(h) + oz * Math.cos(h) > 0) blocked = true;
   }
-  t.wait = blocked ? (t.wait || 0) + dt : 0;
   if (blocked) speedT = 0;
+  // 转弯比沙漠里快一点，不然路口拐不过去；车身会压到楼就停下，堵住（顶牛或卡墙）3 秒就掉头
+  if (moveTank(t, want, speedT, TANK_TURN * 2, dt)) blocked = true;
+  t.wait = blocked ? (t.wait || 0) + dt : 0;
   if (t.wait > 3) { [t.node, t.prev] = [t.prev, t.node]; t.wait = 0; }
-  // 转弯比沙漠里快一点，不然路口拐不过去
-  t.g.rotation.y += clamp(angDiff(want, h), -TANK_TURN * 2 * dt, TANK_TURN * 2 * dt);
-  t.speed += (speedT - t.speed) * damp(1.5, dt);
-  p.x += Math.sin(t.g.rotation.y) * t.speed * dt;
-  p.z += Math.cos(t.g.rotation.y) * t.speed * dt;
   p.y = 0;
 }
 function driveTank(t, pc, dt) {
@@ -2158,10 +2185,9 @@ function driveTank(t, pc, dt) {
     speedT = 1.5;
     if (rnd() < dt * 0.3) t.orbit *= -1;
   }
-  t.g.rotation.y += clamp(angDiff(want, h), -TANK_TURN * dt, TANK_TURN * dt);
-  t.speed += (speedT - t.speed) * damp(1.5, dt);
-  p.x += Math.sin(t.g.rotation.y) * t.speed * dt;
-  p.z += Math.cos(t.g.rotation.y) * t.speed * dt;
+  // 车身会压到房子就停下，下一帧换个方向转
+  if (moveTank(t, want, speedT, TANK_TURN, dt)) { t.orbit *= rnd() < dt * 2 ? -1 : 1; t.stuck = (t.stuck || 0) + dt; } else t.stuck = 0;
+  if (t.stuck > 4) { t.stuck = 0; t.g.rotation.y += Math.PI * (0.5 + rnd() * 0.5); }
   p.y = terrainH(p.x, p.z);
   // 履带扬起的沙尘
   if (rnd() < t.speed * dt * 2) emit(_e3.set(p.x - Math.sin(h) * 3 + (rnd() - 0.5) * 3, p.y + 0.3, p.z - Math.cos(h) * 3), _v.set(0, 0.5, 0), 1.5, 1.4, 4);
@@ -2181,6 +2207,8 @@ function updateTanks(dt) {
       if (now > t.respawn && !t.wreck && !S.ceasefire) respawnTank(t);
       continue;
     }
+    // 开局摆的位置压在房子上的，挪到空地去
+    if (!t.placed) { t.placed = true; if (tankHullBlocked(t.g.position.x, t.g.position.z, t.g.rotation.y, t.g.position.y)) respawnTank(t); }
     if (!calm()) driveTank(t, pc, dt);
     const to = _e2.copy(pc).sub(t.g.position);
     // 每 0.4 秒查一次视线：被楼挡住就只转炮塔跟着你，不开火
@@ -2194,7 +2222,7 @@ function updateTanks(dt) {
         const air = S.pos.y - terrainH(S.pos.x, S.pos.z) > 6;
         // 空中同时最多 3 枚导弹，全场两次发射至少隔 2.5 秒，不然打炮弹
         if (air && atgms.length < 3 && now > nextAtgm) { fireAtgm(t); nextAtgm = now + 2.5; } else fireShell(t);
-        t.reload = (air ? 7 + rnd() * 4 : 3.5 + rnd() * 2.5) * waveMul();   // 导弹装填比炮弹慢
+        t.reload = (air ? 8 + rnd() * 4 : 5 + rnd() * 3) * waveMul();   // 导弹装填比炮弹慢
       }
     } else {
       t.turret.rotation.y = lerpAngle(t.turret.rotation.y, Math.sin(now * 0.3 + t.phase) * 0.8, damp(1, dt));
@@ -2215,7 +2243,10 @@ function killDrone(d, dust) {
   S.stats.drones++;
   d.alive = false;
   d.g.visible = false;
-  d.respawn = now + 8 + rnd() * 4;
+  // 按波刷新：这一波打掉的不再补，等下一波开始才来新的一批
+  d.respawn = now + 3 + rnd() * 3;
+  d.killedWave = S.wave;
+  if (!dust && drones.every(o => !o.alive) && drones.some(o => o.killedWave === S.wave)) notice('DRONES CLEARED', '#8fe3ff');
   if (!dust) { explosion(d.g.position.clone(), 0.5); return; }
   sfx.dust(d.g.position);
   for (let i = 0; i < 40; i++) emit(_p.copy(d.g.position).add(randDir(_v).multiplyScalar(0.4)), _v.set(1 + rnd(), 0.5 + rnd(), 0.6 + rnd()), 2 + rnd() * 2, 0.2, 5);
@@ -2225,7 +2256,7 @@ function updateDrones(dt) {
   for (const d of drones) {
     if (d.dustAt && now >= d.dustAt) { d.dustAt = 0; killDrone(d, true); }
     if (!d.alive) {
-      if (now > d.respawn && !calm() && drones.indexOf(d) < activeDrones()) spawnDrone(d);
+      if (now > d.respawn && (d.killedWave ?? 0) < S.wave && !calm() && drones.indexOf(d) < activeDrones()) spawnDrone(d);
       continue;
     }
     if (S.ceasefire) {
@@ -2260,7 +2291,7 @@ function updateDrones(dt) {
     d.g.userData.strobe.visible = (now * 1.6 + d.ang) % 1 < 0.12;
     d.reload -= dt;
     if (d.reload <= 0 && d.g.position.distanceTo(pc) < 70 && !calm()) {
-      if (seesPlayer(d.g.position)) { fireBolt(d); d.reload = (0.9 + rnd() * 0.9) * waveMul(); }
+      if (seesPlayer(d.g.position)) { fireBolt(d); d.reload = (1.6 + rnd() * 1.2) * waveMul(); }
       else d.reload = 0.3;   // 被楼挡住：过一会儿再看
     }
   }
@@ -2271,7 +2302,8 @@ function updateDrones(dt) {
 // 第 2 波起成群飞来：落地跑着追你，近身挥刀（出手前眼睛先亮，看到就闪），远处抬手射红光；
 // 你飞上天它们也会飞上来，但只有约 10 米/秒，比钢铁侠普通飞行（15）还慢
 const ROBOT_HP = 3, MAX_ROBOTS = 8, ROBOT_RUN = 6, ROBOT_FLY = 10;
-const activeRobots = () => S.wave < 2 ? 0 : Math.min(MAX_ROBOTS, 2 * S.wave - 1);
+// 只在纽约出现（沙漠里不要）
+const activeRobots = () => !CITY || S.wave < 2 ? 0 : Math.min(5, S.wave - 1);
 let robotProto = null;
 const robotBuf = await assetBuf.robot;
 if (robotBuf) robotProto = (await gltfLoader().parseAsync(robotBuf, '')).scene;
@@ -3342,8 +3374,11 @@ function updateUltron(dt) {
 }
 
 // ---- 钢铁侠受伤：先扣护盾（几秒不挨打自动回满），护盾没了才扣装甲 ----
+// 难度：所有挨打的伤害统一乘这个数（用户反馈「完全打不过」后从 1 调到 0.55）
+const INCOMING = 0.55;
 function hurt(amount) {
   if (S.down || now < S.invuln || amount <= 0) return;
+  amount *= INCOMING;
   S.stats.dmg += amount;
   const absorbed = Math.min(S.shield, amount);
   S.shield -= absorbed;
@@ -3372,8 +3407,9 @@ function updateSuit(dt) {
       sfx.powerUp();
     }
   } else {
-    if (now - S.lastHit > 3) S.shield = Math.min(100, S.shield + 30 * dt);
-    if (now - S.lastHit > 6) S.armor = Math.min(100, S.armor + 4 * dt);
+    // 护盾 2.5 秒没挨打就开始回（每秒 35），装甲 4 秒后开始回（每秒 8）
+    if (now - S.lastHit > 2.5) S.shield = Math.min(100, S.shield + 35 * dt);
+    if (now - S.lastHit > 4) S.armor = Math.min(100, S.armor + 8 * dt);
     if (S.armor < 30 && now > S.nextBeep) { sfx.beep(); S.nextBeep = now + 0.8; }
   }
   S.hurtFlash *= Math.exp(-dt * 2.5);

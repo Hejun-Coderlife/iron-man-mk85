@@ -4,7 +4,7 @@ A browser game built with three.js: walk, fly and fight as Iron Man Mark 85 in a
 
 **Play:** https://hejun-coderlife.github.io/iron-man-mk85/
 
-Controls: WASD move/fly · Space take off · C land · Shift boost · ⌥/Alt or double-tap WASD dodge · Mouse aim · LMB repulsor · RMB unibeam · Q forearm laser (hold) · E shoulder guns · F snap · B summon boss (desert) · M mute
+Controls: WASD move/fly · Space take off · C land · Shift boost · ⌥/Alt or double-tap WASD dodge · Mouse aim · LMB repulsor · RMB or R unibeam · Q forearm laser (hold) · E shoulder guns · F snap · B summon boss (desert) · M mute
 
 Desert: destroy the 4 weapon depots to bring out the boss. Day turns to dusk and night as you play.
 New York: Ultron arrives on the landmark tower's helipad at wave 4.
