@@ -7,11 +7,12 @@ A browser game built with three.js: walk, fly and fight as Iron Man Mark 85 in a
 Controls: WASD move/fly · Space take off · C land · Shift boost · ⌥/Alt or double-tap WASD dodge · Mouse aim · LMB repulsor · RMB unibeam · Q forearm laser (hold) · E shoulder guns · F snap · B summon boss (desert) · M mute
 
 Desert: destroy the 4 weapon depots to bring out the boss. Day turns to dusk and night as you play.
+New York: Ultron arrives on the landmark tower's helipad at wave 4.
 
 ## Credits
 - "Iron Man Mark 85" model by **LLlypuk** — CC BY 4.0 (decimated & rigged for this project)
 - T-72 tank model by **Nekis5_3D** (itch.io, free for personal & commercial use)
-- Ultron sentry from "Ultron Pack" by **Eveston** — CC BY 4.0
+- Ultron sentry and Ultron (boss) from "Ultron Pack" by **Eveston** — CC BY 4.0
 - Boss: "Iron Man Mark 44 Hulkbuster" by **Ahad4940** — CC BY 4.0 (recolored, decimated & rigged)
 - "Boeing AH-64D Apache Combat Helicopter" by **Muhamad Mirza Arrafi** — CC BY 4.0 (rotors separated)
 - New York map data © **OpenStreetMap contributors** — ODbL

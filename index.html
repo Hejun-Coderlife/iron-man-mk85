@@ -117,7 +117,7 @@ canvas{display:block}
 <div id="snap"></div>
 <div id="victory">
   <h2>MISSION COMPLETE</h2>
-  <div class="sub">IRON MONGER DESTROYED</div>
+  <div class="sub" id="vSub">IRON MONGER DESTROYED</div>
   <div class="rank" id="vRank">S</div>
   <div class="sub">RANK</div>
   <table id="vStats"></table>
@@ -137,7 +137,7 @@ canvas{display:block}
   <small id="startSub"></small>
 </div>
 
-<script>window.ASSET_SIZES = {"assets/mk85.glb": 3705580, "assets/env.glb": 5272536, "assets/tank.glb": 871028, "assets/robot.glb": 3752580, "assets/boss.glb": 740444, "assets/heli.glb": 1959288, "assets/depot.glb": 2560200, "assets/sky_sunset_4k.jpg": 168168, "assets/sky_sunset_1k.hdr": 831904, "assets/sky_night_4k.jpg": 738591, "assets/sky_night_1k.hdr": 1289706, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651, "assets/sfx.pack": 697173, "assets/city.glb": 8288372, "assets/city_nav.json": 43098, "assets/city_sky_4k.jpg": 323557, "assets/city_sky_1k.hdr": 1392424, "assets/city_masks/brick.png": 10591, "assets/city_masks/brownstone.png": 11352, "assets/city_masks/limestone.png": 12500, "assets/city_masks/stone.png": 11935, "assets/city_masks/stone2.png": 13002, "assets/city_masks/glass.png": 8230, "assets/city_masks/glass2.png": 7395, "assets/city_masks/storefront.png": 4172};</script>
+<script>window.ASSET_SIZES = {"assets/mk85.glb": 3705580, "assets/env.glb": 5272536, "assets/tank.glb": 871028, "assets/robot.glb": 3752580, "assets/boss.glb": 740444, "assets/heli.glb": 1959288, "assets/depot.glb": 2560200, "assets/ultron.glb": 2222628, "assets/sky_sunset_4k.jpg": 168168, "assets/sky_sunset_1k.hdr": 831904, "assets/sky_night_4k.jpg": 738591, "assets/sky_night_1k.hdr": 1289706, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651, "assets/sfx.pack": 697173, "assets/city.glb": 8288372, "assets/city_nav.json": 43098, "assets/city_sky_4k.jpg": 323557, "assets/city_sky_1k.hdr": 1392424, "assets/city_masks/brick.png": 10591, "assets/city_masks/brownstone.png": 11352, "assets/city_masks/limestone.png": 12500, "assets/city_masks/stone.png": 11935, "assets/city_masks/stone2.png": 13002, "assets/city_masks/glass.png": 8230, "assets/city_masks/glass2.png": 7395, "assets/city_masks/storefront.png": 4172};</script>
 <script type="importmap">
 {"imports":{
   "three":"./vendor/three/build/three.module.js",
@@ -233,6 +233,7 @@ const ASSETS = {
   heli: ['HELI_GLB_B64', 'assets/heli.glb'],
   ...(CITY ? {
     city: ['CITY_GLB_B64', 'assets/city.glb'],
+    ultron: ['ULTRON_GLB_B64', 'assets/ultron.glb'],
     nav: ['CITY_NAV_B64', 'assets/city_nav.json'],
     sky: ['CITY_SKY_JPG_B64', 'assets/city_sky_4k.jpg'],
     hdr: ['CITY_SKY_HDR_B64', 'assets/city_sky_1k.hdr'],
@@ -1079,6 +1080,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyE') fireGuns();
   if (e.code === 'KeyF') startSnap();
   if (e.code === 'KeyB' && !CITY && boss && !boss.alive && !boss.g.visible) spawnBoss();
+  if (e.code === 'KeyB' && CITY && ultron && !ultron.alive && !ultron.g.visible) spawnUltron();
   if (e.code === 'KeyH') helpEl.style.display = helpEl.style.display === 'none' ? '' : 'none';
   if (e.code === 'KeyP') { qAuto = false; qIdx = (qIdx + 1) % QUALITY.length; resize(); }
 });
@@ -1557,7 +1559,7 @@ function updateHouses(dt) {
 
 function damage(t, amt) {
   if (!t.alive) return;
-  if (t.kind === 'boss') { amt = Math.min(amt, 12); t.hitFlash = 1; }   // 胸口光束一发秒不掉它，最多算 12
+  if (t.kind === 'boss' || t.kind === 'ultron') { amt = Math.min(amt, 12); t.hitFlash = 1; }   // 胸口光束一发秒不掉它，最多算 12
   t.hp -= amt;
   if (t.hp > 0) return;
   if (t.kind === 'drone') { killDrone(t, false); return; }
@@ -1566,6 +1568,7 @@ function damage(t, amt) {
   if (t.kind === 'boss') { killBoss(); return; }
   if (t.kind === 'depot') { destroyDepot(t); return; }
   if (t.kind === 'heli') { downHeli(t); return; }
+  if (t.kind === 'ultron') { killUltron(); return; }
   wreckTank(t);
   explosion(_p.copy(t.g.position).setY(t.g.position.y + 1.2), 2.2);
 }
@@ -1909,7 +1912,7 @@ function updateWave() {
 }
 // 宕机重启中、或者打赢 Boss 后的停火阶段：敌人不开火、不刷新
 const calm = () => S.down || S.ceasefire;
-const enemies = () => [...tanks, ...drones, ...atgms, ...robots, ...(boss?.alive ? [boss] : []), ...depots.filter(d => d.alive), ...helis.filter(h => h.alive)];
+const enemies = () => [...tanks, ...drones, ...atgms, ...robots, ...(boss?.alive ? [boss] : []), ...depots.filter(d => d.alive), ...helis.filter(h => h.alive), ...(ultron?.alive ? [ultron] : [])];
 
 // ---- 敌方弹药：看得见的曳光弹，可以躲 ----
 const shellMat = uniMat(new THREE.Color(4, 2.2, 0.8)), boltMat = uniMat(new THREE.Color(5, 0.4, 0.3));
@@ -2278,9 +2281,9 @@ const RB = { pelvis: 'bip_pelvis', spine: 'bip_spine_2', head: 'bip_head',
   armL: 'bip_upperArm_L', foreL: 'bip_lowerArm_L', armR: 'bip_upperArm_R', foreR: 'bip_lowerArm_R',
   hipL: 'bip_hip_L', kneeL: 'bip_knee_L', footL: 'bip_foot_L', hipR: 'bip_hip_R', kneeR: 'bip_knee_R', footR: 'bip_foot_R' };
 const _rq = new THREE.Quaternion(), _re = new THREE.Euler();
-function makeRobot() {
+function makeRobot(proto = robotProto) {
   const g = new THREE.Group();
-  const body = SkeletonUtils.clone(robotProto);
+  const body = SkeletonUtils.clone(proto);
   g.add(body);
   const mats = new Map(), glow = [];
   body.traverse(o => {
@@ -2331,8 +2334,11 @@ const robots = robotProto ? Array.from({ length: MAX_ROBOTS }, (_, i) => {
 }) : [];
 function spawnRobot(r) {
   if (!robots.some(o => o.alive)) notice('ULTRON SENTRIES INBOUND', '#ff3b2a');
-  const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 100, z = S.pos.z + Math.cos(a) * 100;
-  r.g.position.set(x, Math.max(S.pos.y, terrainH(x, z)) + (CITY ? 60 : 25), z);
+  // 出现在你前方 60~80 米、高出你约 25 米的空中，一出来就看得见（纽约里楼多，远了会被楼挡住）
+  const fw = Math.hypot(S.vel.x, S.vel.z) > 3 ? Math.atan2(S.vel.x, S.vel.z) : camYaw;
+  const a = fw + (rnd() - 0.5) * 1.6, R0 = 60 + rnd() * 20, x = S.pos.x + Math.sin(a) * R0, z = S.pos.z + Math.cos(a) * R0;
+  r.g.position.set(x, Math.max(S.pos.y, terrainH(x, z)) + (CITY ? 30 : 25), z);
+  r.farT = 0;
   r.g.rotation.set(0, 0, 0);
   r.vel.set(0, 0, 0);
   Object.assign(r, { hp: ROBOT_HP, alive: true, flying: true, atk: null, atkCd: 2, shotCd: 2 + rnd() * 2, deadT: -1, dustAt: 0 });
@@ -2389,6 +2395,9 @@ function updateRobots(dt) {
     }
     const to = _e2.copy(pc).sub(p).setY(pc.y - 1.1 - p.y);
     const dist = to.length(), dh = Math.hypot(to.x, to.z);
+    // 被你甩开太远（它们只有 10 米/秒）：4 秒后从你前方重新飞过来
+    r.farT = dist > 110 ? (r.farT || 0) + dt : 0;
+    if (r.farT > 4) { spawnRobot(r); continue; }
     const ground = terrainH(p.x, p.z);
     // 你在天上、或者前面有墙挡路，就飞；否则落地跑
     r.ang += dt * 0.25;
@@ -2672,7 +2681,7 @@ function updateBoss(dt) {
   // 沙漠：4 处武器库全炸掉 4 秒后 Boss 出场（没有武器库模型时退回第 5 波出场）
   const bossReady = depots.length ? depots.every(d => !d.alive) && now > S.depotsClearedAt + 4 : S.wave >= (S.nextBoss ?? 5);
   if (!CITY && !boss.alive && !boss.g.visible && bossReady && !S.bossFought && !calm()) { S.bossFought = true; spawnBoss(); }
-  bossBarEl.style.display = boss.alive ? 'block' : 'none';
+  bossBarEl.style.display = boss.alive || ultron?.alive ? 'block' : 'none';
   if (!boss.g.visible) return;
   const B = boss, p = B.g.position;
   B.st += dt;
@@ -2683,6 +2692,7 @@ function updateBoss(dt) {
   const to = _e2.copy(pc).sub(p);
   const dh = Math.hypot(to.x, to.z);
   const face = Math.atan2(to.x, to.z);
+  bossBarEl.firstChild.nodeValue = 'IRON MONGER';
   bossBarEl.lastChild.firstChild.style.transform = `scaleX(${clamp(B.hp / BOSS_HP, 0, 1)})`;
   B.hitFlash = (B.hitFlash || 0) * Math.exp(-dt * 8);
   if (B.state === 'dead') {
@@ -3120,6 +3130,217 @@ function updateHelis(dt) {
   }
 }
 
+
+// ---- 纽约 Boss：奥创（Ultron Pack 里的金色披风奥创，作者 Eveston，CC BY），3 米高 ----
+// 第 4 波出现在地标塔的停机坪上，然后飞过来，一直飞在空中、离你 18~30 米；
+// 招式（都有预兆）：举起双手连射 6 颗红色能量弹 / 双手前推蓄力射光束 / 眼睛一亮高速冲撞；半血召唤一批小兵
+const ULTRON_HP = 70, ULTRON_FLY = 9;
+let ultronProto = null;
+const ultronBuf = CITY ? await assetBuf.ultron : null;
+if (ultronBuf) ultronProto = (await gltfLoader().parseAsync(ultronBuf, '')).scene;
+const ultron = ultronProto ? (() => {
+  const r = makeRobot(ultronProto);
+  r.g.children.find(o => o.isMesh && !o.visible).scale.set(2.2, 1.6, 2);   // 碰撞盒按 3 米身高放大
+  r.g.children.find(o => o.isMesh && !o.visible).position.y = 1.5;
+  // 披风是布：原材质的金属度/粗糙度来自一张导不出来的小贴图，丢了以后变成半金属，会把天空反射成一片白
+  for (const m of r.glow) if (/Equip_04/.test(m.name)) { m.metalness = 0.1; m.roughness = 0.75; }
+  Object.assign(r, { kind: 'ultron', hp: 0, alive: false, aimY: 1.8, vel: new V3(), phase: 0, ang: 0, flying: true, flyW: 1, state: 'idle', st: 0 });
+  r.g.visible = false;
+  r.g.userData.target = r;
+  scene.add(r.g);
+  return r;
+})() : null;
+const ultronBeam = (() => {
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(beamGeo, uniMat(new THREE.Color(6, 0.9, 0.5))), new THREE.Mesh(beamGeo, uniMat(new THREE.Color(1.5, 0.12, 0.06))));
+  g.children[1].scale.set(3, 1, 3);
+  for (const m of g.children) m.frustumCulled = false;
+  g.visible = false;
+  scene.add(g);
+  return g;
+})();
+function spawnUltron() {
+  const U = ultron;
+  Object.assign(U, { hp: ULTRON_HP, alive: true, state: 'intro', st: 0, atkCd: 3, beamCd: 6, dashCd: 5, summoned: false, reported: false });
+  if (PAD) U.g.position.set(PAD.x, PAD.y, PAD.z);
+  else U.g.position.set(S.pos.x + 40, S.pos.y + 30, S.pos.z);
+  U.g.rotation.set(0, Math.atan2(S.pos.x - U.g.position.x, S.pos.z - U.g.position.z), 0);
+  U.vel.set(0, 0, 0);
+  U.g.visible = true;
+  notice('ULTRON', '#ff3b2a');
+  sfx.powerUp();
+}
+function killUltron() {
+  const U = ultron;
+  U.alive = false;
+  U.state = 'dead';
+  U.st = 0;
+  U.reported = false;
+  ultronBeam.visible = false;
+  S.ceasefire = true;
+  slowUntil = performance.now() + 2000;
+  for (const m of [...atgms]) killAtgm(m, true);
+  S.nextUltron = S.wave + 4;
+}
+const ultronRay = new THREE.Raycaster();
+function updateUltron(dt) {
+  const U = ultron;
+  if (!U) return;
+  if (!U.alive && !U.g.visible && S.wave >= (S.nextUltron ?? 4) && !calm()) spawnUltron();
+  if (!U.g.visible) return;
+  const p = U.g.position;
+  U.st += dt;
+  if (U.dustAt && now >= U.dustAt) { U.dustAt = 0; if (U.alive) damage(U, 12); }
+  U.hitFlash = (U.hitFlash || 0) * Math.exp(-dt * 8);
+  if (U.alive) {
+    bossBarEl.firstChild.nodeValue = 'ULTRON';
+    bossBarEl.lastChild.firstChild.style.transform = `scaleX(${clamp(U.hp / ULTRON_HP, 0, 1)})`;
+  }
+  const set = (st) => { U.state = st; U.st = 0; U.done = false; U.shots = 0; };
+  let glow = 2;
+  if (U.state === 'dead') {
+    // 失去动力往下掉，砸地连环爆炸
+    U.vel.y -= 9.8 * dt;
+    p.addScaledVector(U.vel, dt);
+    U.g.rotation.x = Math.min(U.g.rotation.x + dt * 1.5, 1.4);
+    if (rnd() < dt * 40) emitSmoke(p.clone().setY(p.y + 1.5), _v.set(0, 1, 0), 3, 1);
+    if (rnd() < dt * 20) emit(_p.copy(p).setY(p.y + 1.5), randDir(_v).multiplyScalar(5), 0.4, 0.06, 2);
+    if (p.y <= 0.2 && !U.done) {
+      U.done = true;
+      p.y = 0.2;
+      U.vel.set(0, 0, 0);
+      for (let i = 0; i < 4; i++) explosion(_p.copy(p).add(_b.set((rnd() - 0.5) * 2, 0.5 + rnd() * 2, (rnd() - 0.5) * 2)), 1.5);
+      flash(_p.copy(p).setY(1.5), COL.fire, 4000);
+      sfx.boom(p, 1);
+      S.shake = 1;
+      notice('ULTRON DEFEATED', '#ffb347');
+    }
+    if (p.y < 0.2) p.y = 0.2;
+    if (U.done && U.st > 3.4 && !U.reported) { U.reported = true; showVictory('ULTRON'); }
+    if (U.st > 14) { U.g.visible = false; U.g.rotation.x = 0; }
+    for (const m of U.glow) m.emissiveIntensity = 0.05;
+    animateRobot(U, dt);
+    return;
+  }
+  const pc = playerCenter(_e1).clone();
+  const to = _e2.copy(pc).sub(p).setY(pc.y - 1.6 - p.y);
+  const dist = to.length();
+  U.atkCd -= dt; U.beamCd -= dt; U.dashCd -= dt;
+  // 半血：召唤小兵护驾
+  if (!U.summoned && U.hp < ULTRON_HP / 2) {
+    U.summoned = true;
+    notice('SENTRIES SUMMONED', '#ff3b2a');
+    for (const r of robots) if (!r.alive) { spawnRobot(r); r.g.position.copy(p).add(_b.set((rnd() - 0.5) * 16, 4 + rnd() * 6, (rnd() - 0.5) * 16)); }
+  }
+  const busy = ['volley', 'beam', 'dash'].includes(U.state);
+  if (U.state === 'intro') {
+    // 站在停机坪上，眼睛慢慢亮起来，2.5 秒后起飞
+    glow = 2 + U.st * 3;
+    U.vel.set(0, 0, 0);
+    if (U.st > 2.5) set('fly');
+  } else if (!busy && !calm()) {
+    const sees = seesPlayer(_e3.copy(p).setY(p.y + 2.4));
+    if (sees && dist < 26 && U.dashCd <= 0) set('dash');
+    else if (sees && dist < 80 && U.beamCd <= 0) set('beam');
+    else if (sees && dist < 80 && U.atkCd <= 0) set('volley');
+    else if (U.state !== 'fly') set('fly');
+  }
+  // ---- 移动：保持 18~30 米、比你高一点，绕着你慢慢转 ----
+  if (U.state === 'fly' || U.state === 'volley' || U.state === 'beam') {
+    U.ang += dt * 0.25;
+    const want = _e3.set(pc.x + Math.sin(U.ang) * 24 - p.x, Math.max(pc.y + 2, 6) - p.y, pc.z + Math.cos(U.ang) * 24 - p.z);
+    const vmax = dist > 60 ? 15 : ULTRON_FLY;   // 远处赶过来时快一些，追上了就放慢
+    if (want.length() > vmax) want.setLength(vmax);
+    U.vel.lerp(want.multiplyScalar(U.state === 'fly' ? 1 : 0.3), damp(1.5, dt));
+  } else if (U.state === 'dash') {
+    // 0.7 秒前摇（眼睛越来越亮、身体后仰），然后 30 米/秒冲过来，0.6 秒
+    if (U.st < 0.7) { U.vel.multiplyScalar(Math.exp(-dt * 5)); glow = 2 + U.st * 12; U.dashDir = to.clone().normalize(); }
+    else if (U.st < 1.3) {
+      U.vel.copy(U.dashDir).multiplyScalar(30);
+      if (rnd() < 0.8) emit(p.clone().setY(p.y + 1.5), _v.copy(U.dashDir).multiplyScalar(-6), 0.3, 0.6, 0);
+      if (!U.done && playerCenter(_e3).distanceTo(_d.copy(p).setY(p.y + 1.5)) < 2.8) {
+        U.done = true;
+        hurt(28);
+        S.vel.addScaledVector(U.dashDir, 16).setY(4);
+        sfx.boom(p, 0.4);
+        S.shake = Math.max(S.shake, 0.6);
+      }
+    } else { U.vel.multiplyScalar(Math.exp(-dt * 4)); if (U.st > 1.8) { set('fly'); U.dashCd = (7 + rnd() * 3) * waveMul(); } }
+  }
+  // 撞楼：贴着墙滑开、往上拉
+  if (U.vel.lengthSq() > 0.5) {
+    ultronRay.set(_e3.copy(p).setY(p.y + 1.5), _d.copy(U.vel).normalize());
+    ultronRay.far = U.vel.length() * 0.4 + 2;
+    const hw = ultronRay.intersectObjects(nearBlockers(p, ultronRay.far + 3), false)[0];
+    if (hw) {
+      _cN.copy(hw.face.normal).transformDirection(hw.object.matrixWorld);
+      const vin = U.vel.dot(_cN);
+      if (vin < 0) U.vel.addScaledVector(_cN, -vin);
+      U.vel.y = Math.max(U.vel.y, 5);
+    }
+  }
+  p.addScaledVector(U.vel, dt);
+  if (p.y < 0.5) p.y = 0.5;
+  U.g.rotation.y = lerpAngle(U.g.rotation.y, Math.atan2(to.x, to.z), damp(U.state === 'dash' ? 12 : 4, dt));
+  // ---- 远程招式 ----
+  const handPos = n => (U.rig['fore' + n]?.b.getWorldPosition(new V3()) ?? p.clone().setY(p.y + 2));
+  if (U.state === 'volley') {
+    // 0.5 秒举手蓄力，之后每 0.2 秒左右手交替打一颗能量弹，共 6 颗
+    glow = 2 + Math.min(U.st / 0.5, 1) * 5;
+    if (U.st > 0.5 && U.shots < 6 && U.st > 0.5 + U.shots * 0.2) {
+      const from = handPos(U.shots % 2 ? 'L' : 'R');
+      spawnProjectile(from, leadTarget(from, BOLT_SPEED, 1.4).sub(from).normalize().multiplyScalar(BOLT_SPEED), 'bolt');
+      flash(from, LASER_COL, 30);
+      sfx.bolt(from);
+      U.shots++;
+    }
+    if (U.st > 2) { set('fly'); U.atkCd = (2.5 + rnd() * 1.5) * waveMul(); }
+  } else if (U.state === 'beam') {
+    // 1.2 秒双手前推蓄力 → 1.4 秒光束，慢慢跟着你转
+    glow = 2 + Math.min(U.st / 1.2, 1) * 8;
+    if (U.st > 0.9 && !U.done) { U.done = true; sfx.uniCharge(); }
+    const from = handPos('R').lerp(handPos('L'), 0.5);
+    if (U.st > 1.2 && U.st < 2.6) {
+      if (!U.beamOn) { U.beamOn = true; sfx.uniFire(); U.beamDir = _e3.copy(pc).sub(from).normalize().clone(); }
+      const want = _e3.copy(pc).sub(from).normalize();
+      const ang = U.beamDir.angleTo(want);
+      if (ang > 1e-4) U.beamDir.lerp(want, Math.min(1, 0.4 * dt / ang)).normalize();
+      let end = from.clone().addScaledVector(U.beamDir, 150);
+      const wall = clipShot(from, end);
+      if (wall) end = wall;
+      else if (end.y < 0) end.addScaledVector(U.beamDir, -end.y / U.beamDir.y);
+      const len = from.distanceTo(end);
+      ultronBeam.visible = true;
+      ultronBeam.position.copy(from).addScaledVector(U.beamDir, len / 2);
+      ultronBeam.quaternion.setFromUnitVectors(UP, U.beamDir);
+      ultronBeam.scale.set(0.25 + Math.sin(now * 40) * 0.03, len, 0.25 + Math.sin(now * 40) * 0.03);
+      if (rnd() < 0.7) emit(end, randDir(_v).multiplyScalar(5).add(_b.set(0, 3, 0)), 0.5, 0.6, 1);
+      const rel = _e3.copy(pc).sub(from), along = rel.dot(U.beamDir);
+      if (along > 0 && along < len && rel.addScaledVector(U.beamDir, -along).length() < 1.0) hurt(40 * dt);
+    } else ultronBeam.visible = false;
+    if (U.st > 3) { U.beamOn = false; ultronBeam.visible = false; set('fly'); U.beamCd = (9 + rnd() * 4) * waveMul(); }
+  }
+  for (const m of U.glow) {
+    // 奥创的发光贴图覆盖面大，强度按小兵的一成半算，不然整个人是一团白光
+    m.emissiveIntensity = glow * 0.15;
+    // 被打中时发光件闪一下偏红（只动本来就有发光贴图的；披风这类没有发光贴图的，设了发光色会整块发白）
+    if (m.emissiveMap) m.emissive.setRGB(1, 1 - 0.7 * U.hitFlash, 1 - 0.7 * U.hitFlash);
+  }
+  // 姿态：复用小兵那套；招式时改手臂
+  U.atk = U.state === 'volley' ? { kind: 'shoot', t: Math.min(U.st, 0.4) } : U.state === 'beam' ? { kind: 'shoot', t: Math.min(U.st, 0.4) } : null;
+  U.flying = U.state !== 'intro';
+  animateRobot(U, dt);
+  if (U.state === 'beam' || U.state === 'volley') {
+    const k = ease(clamp(U.st / 0.4, 0, 1));
+    robotPose(U, 'armL', -1.5 * k, 0, 0); robotPose(U, 'foreL', -0.05, 0, 0);
+    robotPose(U, 'armR', -1.5 * k, 0, 0); robotPose(U, 'foreR', -0.05, 0, 0);
+  } else if (U.state === 'dash') {
+    const k = U.st < 0.7 ? ease(U.st / 0.7) : 1;
+    robotPose(U, 'pelvis', U.st < 0.7 ? -0.25 * k : 0.9, 0, 0);
+    robotPose(U, 'armL', 0.8 * k, 0, 0.3); robotPose(U, 'armR', 0.8 * k, 0, -0.3);
+  }
+}
+
 // ---- 钢铁侠受伤：先扣护盾（几秒不挨打自动回满），护盾没了才扣装甲 ----
 function hurt(amount) {
   if (S.down || now < S.invuln || amount <= 0) return;
@@ -3232,6 +3453,7 @@ $('credit').textContent = (suitRoot ? 'Iron Man Mark 85 by LLlypuk (CC BY 4.0, d
   + (tankProto ? ' · T-72 by Nekis5_3D' : '')
   + (robotProto ? ' · Ultron sentry by Eveston (CC BY 4.0)' : '')
   + (heliProto ? ' · AH-64D by Muhamad Mirza Arrafi (CC BY 4.0)' : '')
+  + (ultronProto ? ' · Ultron by Eveston (CC BY 4.0)' : '')
   + (bossProto && !CITY ? ' · Boss: Mark 44 Hulkbuster by Ahad4940 (CC BY 4.0, recolored & rigged)' : '')
   + (CITY ? ' · Map data © OpenStreetMap contributors (ODbL) · Textures: Poly Haven (CC0)' : ' · Environment: Poly Haven (CC0)');
 $('startMsg').textContent = 'Click to start · Esc to exit';
@@ -3272,8 +3494,9 @@ function updateThreats() {
 }
 
 // ---- 过关画面：用时、击毁数、挨的伤害、闪避次数，按用时和伤害评级 ----
-function showVictory() {
+function showVictory(who = 'IRON MONGER') {
   victoryShown = true;
+  $('vSub').textContent = who + ' DESTROYED';
   const T = Math.max(0, now - Math.max(0, S.missionStart)), st = S.stats;
   const mm = Math.floor(T / 60), ss = Math.floor(T % 60).toString().padStart(2, '0');
   // 评级：5 分钟内、挨打少拿 S；8 分钟内拿 A；其余 B
@@ -3788,6 +4011,7 @@ function frame() {
   updateHouses(dt);
   updateDepots(dt);
   updateHelis(dt);
+  updateUltron(dt);
   updateWave();
   updateProjectiles(dt);
   updateAtgms(dt);
