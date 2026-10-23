@@ -95,51 +95,50 @@ canvas{display:block}
   <div id="alert"></div>
   <div id="notice"></div>
   <div id="bars">
-    <div>SHIELD<i id="shieldBar"><b></b></i></div>
-    <div>ARMOR<i id="armorBar"><b></b></i></div>
+    <div>护盾<i id="shieldBar"><b></b></i></div>
+    <div>装甲<i id="armorBar"><b></b></i></div>
   </div>
   <div id="cross"></div>
   <div id="ttag"></div>
   <div id="locks"></div>
   <div id="threats"></div>
   <div id="dlabels"></div>
-  <div id="bossbar">IRON MONGER<i><b></b></i></div>
-  <div id="warn">MISSILE INCOMING</div>
+  <div id="bossbar">铁霸王<i><b></b></i></div>
+  <div id="warn">导弹来袭</div>
   <div id="mwarn"></div>
   <div id="hwarn"></div>
   <div id="stats">
-    <div class="t">MARK 85 · <span id="mode">GROUND</span></div>
-    <div>ALT<b id="alt">0</b>m</div>
-    <div>SPD<b id="spd">0</b>km/h</div>
-    <div id="visi">VIS <span id="visBar"></span> <em id="darkTag"></em></div>
+    <div class="t">MARK 85 · <span id="mode">地面</span></div>
+    <div>高度<b id="alt">0</b>米</div>
+    <div>速度<b id="spd">0</b>km/h</div>
+    <div id="visi">暴露 <span id="visBar"></span> <em id="darkTag"></em></div>
   </div>
   <div id="weap">
-    <div class="w" id="w0">Repulsor<em>LMB</em><u></u></div>
-    <div class="w" id="w1">Unibeam<em>RMB / R</em><u></u></div>
-    <div class="w" id="w2">Laser<em>Q</em><u></u></div>
-    <div class="w" id="w3">Shoulder Guns<em>E</em><u></u></div>
+    <div class="w" id="w0">掌心炮<em>左键</em><u></u></div>
+    <div class="w" id="w1">胸口光束<em>右键 / R</em><u></u></div>
+    <div class="w" id="w2">激光<em>Q</em><u></u></div>
+    <div class="w" id="w3">肩炮<em>E</em><u></u></div>
     <div class="w" id="w4" style="display:none">Snap<em>F</em><u></u></div>
-    <div class="w" id="w5">Dodge<em>⌥ / ALT</em><u></u></div>
+    <div class="w" id="w5">闪避<em>⌥ / ALT</em><u></u></div>
   </div>
   <div id="help">
-    <div><kbd>WASD</kbd>Move / Fly</div>
-    <div><kbd>Space</kbd>Take off · Ascend</div>
-    <div><kbd>C</kbd>Descend · Land</div>
-    <div><kbd>Shift</kbd>Boost · double-tap &amp; hold high in air: supercruise → Mach 3</div>
-    <div><kbd>⌥ Option</kbd>Dodge (Alt on Windows · or double-tap WASD)</div>
-    <div><kbd>Mouse</kbd>Aim (flight follows crosshair)</div>
-    <div><kbd>LMB</kbd>Repulsor (hold to auto-fire)</div>
-    <div><kbd>RMB / R</kbd>Unibeam (chest beam)</div>
-    <div><kbd>Q</kbd>Forearm laser (hold)</div>
-    <div><kbd>E</kbd>Shoulder guns · auto-lock</div>
-    <div><kbd>C</kbd>Crouch (on ground)</div>
-    <div><kbd>Tab</kbd>Scan · reveal cloaked nodes (New York)</div>
-    <div><kbd>V</kbd>Faceplate　<kbd>G</kbd>Dark mode (stealth)</div>
-    <div><kbd>X</kbd>Flares (decoy missiles)</div>
-    <div><kbd>B</kbd>Summon boss (desert)</div>
-    <div><kbd>K</kbd>Fullscreen　<kbd>Esc</kbd>Pause</div>
-    <div><kbd>P</kbd>Quality　<kbd>M</kbd>Mute　<kbd>H</kbd>Hide help</div>
-    <div><kbd>L</kbd>Save perf log</div>
+    <div><kbd>WASD</kbd>移动 / 飞行</div>
+    <div><kbd>空格</kbd>起飞 · 上升</div>
+    <div><kbd>C</kbd>下降 · 降落（地上按 C 蹲下）</div>
+    <div><kbd>Shift</kbd>加速 · 空中连按两下按住：超音速 → 3 马赫</div>
+    <div><kbd>⌥ Option</kbd>闪避（Windows 用 Alt · 或连按两下方向键）</div>
+    <div><kbd>鼠标</kbd>瞄准（飞行方向跟着准星）</div>
+    <div><kbd>左键</kbd>掌心炮（按住连发）· 敌人贴脸时变近身连招</div>
+    <div><kbd>右键 / R</kbd>胸口光束 · 敌人贴脸时抓起来扔出去</div>
+    <div><kbd>Q</kbd>小臂激光（按住）</div>
+    <div><kbd>E</kbd>肩炮 · 自动锁定</div>
+    <div><kbd>Tab</kbd>扫描 · 找出隐形节点（纽约）</div>
+    <div><kbd>V</kbd>面甲　<kbd>G</kbd>潜行模式（关灯）</div>
+    <div><kbd>X</kbd>干扰弹（骗走导弹）</div>
+    <div><kbd>B</kbd>召唤 Boss（沙漠）</div>
+    <div><kbd>K</kbd>全屏　<kbd>Esc</kbd>暂停</div>
+    <div><kbd>P</kbd>画质　<kbd>M</kbd>静音　<kbd>H</kbd>隐藏说明</div>
+    <div><kbd>L</kbd>保存性能记录</div>
   </div>
   <div id="fps"></div>
   <canvas id="radar" width="360" height="360"></canvas>
@@ -147,39 +146,39 @@ canvas{display:block}
 </div>
 <div id="snap"></div>
 <div id="pause">
-  <h2>PAUSED</h2>
-  <button id="pResume">RESUME</button>
-  <button id="pFull">FULLSCREEN · K</button>
-  <label>MOUSE SPEED <input id="pSens" type="range" min="0.4" max="2.5" step="0.05" value="1"></label>
-  <label>VOLUME <input id="pVol" type="range" min="0" max="1.5" step="0.05" value="1"></label>
-  <button id="pMenu">CHOOSE MAP</button>
+  <h2>暂停</h2>
+  <button id="pResume">继续</button>
+  <button id="pFull">全屏 · K</button>
+  <label>鼠标灵敏度 <input id="pSens" type="range" min="0.4" max="2.5" step="0.05" value="1"></label>
+  <label>音量 <input id="pVol" type="range" min="0" max="1.5" step="0.05" value="1"></label>
+  <button id="pMenu">选择地图</button>
 </div>
 <div id="cine"><h3></h3><p></p></div>
 <div id="fail">
-  <h2>MISSION FAILED</h2>
+  <h2>任务失败</h2>
   <div class="sub" id="fSub"></div>
   <div class="btns">
-    <button id="fRetry">RESTART MISSION</button>
-    <button id="fMenu">CHOOSE MAP</button>
+    <button id="fRetry">重新开始</button>
+    <button id="fMenu">选择地图</button>
   </div>
 </div>
 <div id="victory">
-  <h2>MISSION COMPLETE</h2>
-  <div class="sub" id="vSub">IRON MONGER DESTROYED</div>
+  <h2>任务完成</h2>
+  <div class="sub" id="vSub">铁霸王已摧毁</div>
   <div class="rank" id="vRank">S</div>
-  <div class="sub">RANK</div>
+  <div class="sub">评级</div>
   <table id="vStats"></table>
   <div class="btns">
-    <button id="vCont">CONTINUE · ENDLESS</button>
-    <button id="vMenu">CHOOSE MAP</button>
+    <button id="vCont">继续 · 无尽模式</button>
+    <button id="vMenu">选择地图</button>
   </div>
 </div>
 <div id="start">
   <h1>MARK 85</h1>
-  <p id="startMsg">Loading…</p>
+  <p id="startMsg">载入中…</p>
   <div id="maps">
-    <button data-map="desert">DESERT VILLAGE<small>Open terrain · tanks</small></button>
-    <button data-map="nyc">NEW YORK<small>Midtown Manhattan</small></button>
+    <button data-map="desert">沙漠<small>解放古尔米拉 · 摧毁十戒帮武器库</small></button>
+    <button data-map="nyc">纽约<small>曼哈顿中城 · 奥创大军</small></button>
   </div>
   <div id="bar"><i></i></div>
   <small id="startSub"></small>
@@ -248,7 +247,7 @@ const MAP = await new Promise(res => {
   if (q === 'desert' || q === 'nyc') return res(q);
   const box = document.getElementById('maps');
   document.getElementById('bar').style.visibility = 'hidden';
-  document.getElementById('startMsg').textContent = 'Choose a battlefield';
+  document.getElementById('startMsg').textContent = '选择战场';
   box.style.display = 'flex';
   box.addEventListener('click', e => {
     const b = e.target.closest('button');
@@ -256,7 +255,7 @@ const MAP = await new Promise(res => {
     e.stopPropagation();
     box.style.display = 'none';
     document.getElementById('bar').style.visibility = '';
-    document.getElementById('startMsg').textContent = 'Loading…';
+    document.getElementById('startMsg').textContent = '载入中…';
     res(b.dataset.map);
   });
 });
@@ -355,7 +354,7 @@ function showProgress() {
   const got = keys.reduce((n, k) => n + Math.min(loaded[k] || 0, sizes[k]), 0);
   const pct = Math.round(got / total * 100);
   barEl.style.width = pct + '%';
-  startMsgEl.textContent = `Loading… ${pct}%  (${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB)`;
+  startMsgEl.textContent = `载入中… ${pct}%（${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} MB）`;
 }
 async function download(key, url) {
   const res = await fetch(url);
@@ -670,7 +669,7 @@ const envBuf = CITY ? null : await assetBuf.env;
 let NAV = null, PAD = null, HOME = new V3();
 const cityBuf = CITY ? await assetBuf.city : null;
 if (cityBuf) {
-  startMsgEl.textContent = 'Building city…';
+  startMsgEl.textContent = '正在搭建城市…';
   const city = (await gltfLoader().parseAsync(cityBuf, '')).scene;
   const masks = {};
   for (const k of FACADES) {
@@ -711,7 +710,7 @@ if (cityBuf) {
     // 出生点：离地图中心最近的路口
     let best = Infinity;
     for (const n of NAV) { const d = Math.hypot(n.x, n.z); if (n.nb.length > 2 && d < best) { best = d; HOME.set(n.x, 0, n.z); } }
-    startMsgEl.textContent = 'Dressing streets…';
+    startMsgEl.textContent = '正在布置街道…';
     dressCity(city, data.roads);
     await setupTrees();
     await setupStreetLife();
@@ -3952,6 +3951,12 @@ function land() {
   if (S.knock) { S.knock = 0; S.invuln = Math.max(S.invuln, now + LAND_DEEP_T + 1.2); }
   S.landDeep = impact > 8;
   if (S.down) downAct(40 / 30);   // 宕机掉下来：直接接倒地躺着
+  else if (S.wasKnocked) {
+    // 被打下来摔在地上：仰面摔倒躺一下 → 爬起来（自己落地是单膝跪地 / 双拳砸地，两种分开）；爬起来那 2 秒走不了
+    const kn = rnd() < 0.5 ? 'knockdown' : 'stunned';
+    playAct(kn, { from: (kn === 'knockdown' ? 40 : 34) / 30, dur: 1.5, fade: 0.05, next: { name: 'getup', from: 0, dur: 2.2, fade: 0.08 } });
+    S.stunUntil = now + 3.4;
+  }
   else if (impact > 18 && !fromDrop && enemies().some(t => t.alive && ['soldier', 'extremis', 'robot'].includes(t.kind) && t.g.position.distanceTo(S.pos) < 9)) {
     // 俯冲砸进敌人堆：双拳砸地（Jump Attack 第 45 帧起），7 米内士兵全倒、绝境战士和机器人吃 3 点
     playAct('jumpattack', { from: 45 / 30, dur: 1.9, fade: 0.05 });
@@ -4121,7 +4126,7 @@ function pose(dt) {
   if (S.act) {
     const A = S.act;
     A.t += dt;
-    if (A.t >= A.dur || (S.flying && !A.air)) S.act = null;
+    if (A.t >= A.dur || (S.flying && !A.air)) { S.act = null; if (A.next && !S.flying && !S.down) playAct(A.next.name, A.next); }
     else {
       if (A.hitAt != null && !A.hitDone && A.t >= A.hitAt) { A.hitDone = true; meleeHit(A.target, A.name); }
       if (A.grab) {
@@ -5897,7 +5902,7 @@ function updateBoss(dt) {
   const to = _e2.copy(pc).sub(p);
   const dh = Math.hypot(to.x, to.z);
   const face = Math.atan2(to.x, to.z);
-  bossBarEl.firstChild.nodeValue = 'IRON MONGER';
+  bossBarEl.firstChild.nodeValue = '铁霸王';
   bossBarEl.lastChild.firstChild.style.transform = `scaleX(${clamp(B.hp / BOSS_HP, 0, 1)})`;
   B.hitFlash = (B.hitFlash || 0) * Math.exp(-dt * 8);
   if (B.state === 'dead') {
@@ -7126,7 +7131,7 @@ function updatePOIs(dt) {
   if (oasisWater) oasisWater.uT.value = now;
   if (homePad) {
     const ok = now > homePad.cd, pulse = 0.7 + 0.3 * Math.sin(now * 3);
-    if (!S.liberated) homePad.ringMat.color.setRGB(0.25, 0.04, 0.03); else
+    if (!S.liberated) homePad.ringMat.color.setRGB(2.6 * pulse, 0.18 * pulse, 0.1 * pulse); else   // 村子还被占着：红光（锁定），解放后变蓝
     homePad.ringMat.color.setRGB(ok ? 0.4 * pulse : 0.3, ok ? 2.2 * pulse : 0.3, ok ? 3 * pulse : 0.35);
     if (ok && S.liberated && !S.flying && !S.down && Math.hypot(S.pos.x - homePad.p.x, S.pos.z - homePad.p.z) < 5.5 && (S.armor < 100 || S.shield < 100)) { S.armor = 100; S.shield = 100; homePad.cd = now + 45; sfx.powerUp?.(); notice('REPAIR PAD · ARMOR & SHIELD RESTORED', '#7dffb0', 2500); }
   }
@@ -7238,12 +7243,12 @@ function updateHostageHud() {
     if (!best || c.execAt < best.execAt) best = c;
   }
   if (!best || calm()) {
-    if (S.compromised && !calm()) { el.textContent = `MISSION COMPROMISED · ${S.compromised}`; el.style.color = '#ff3b2a'; el.style.display = 'block'; }
+    if (S.compromised && !calm()) { el.textContent = zh(`MISSION COMPROMISED · ${S.compromised}`); el.style.color = '#ff3b2a'; el.style.display = 'block'; }
     else el.style.display = 'none';
     return;
   }
   const left = Math.max(0, best.execAt - now), km = (Math.hypot(best.o.x - S.pos.x, best.o.z - S.pos.z) / 1000).toFixed(1);
-  el.textContent = `HOSTAGES · EXECUTION IN ${Math.ceil(left)}s · ${km} km · ${clockOf(best.o.x, best.o.z)} · LOST ${S.stats.hostagesLost || 0}/${HOSTAGE_FAIL || 5}`;
+  el.textContent = zh(`HOSTAGES · EXECUTION IN ${Math.ceil(left)}s · ${km} km · ${clockOf(best.o.x, best.o.z)} · LOST ${S.stats.hostagesLost || 0}/${HOSTAGE_FAIL || 5}`);
   el.style.display = 'block';
   el.style.color = left < 5 && (now * 3) % 1 < 0.5 ? '#ff3b2a' : '#ffb347';
 }
@@ -8977,7 +8982,7 @@ function updateDepots_(dt) {
     el.style.left = (v.x * 0.5 + 0.5) * innerWidth + 'px';
     el.style.top = (-v.y * 0.5 + 0.5) * innerHeight + 'px';
     const left = d.node ? d.relays.filter(o => o.alive).length : 0;
-    el.textContent = `${OBJ_NAME} ${Math.round(dist)}m` + (left ? ` · SHIELDED · ${left} RELAY${left > 1 ? 'S' : ''} LEFT` : '');
+    el.textContent = zh(`${OBJ_NAME} ${Math.round(dist)}m` + (left ? ` · SHIELDED · ${left} RELAY${left > 1 ? 'S' : ''} LEFT` : ''));
   });
   // 扫描显形的供能塔：屏幕上也标出来（显形 6 秒内）
   if (typeof relays !== 'undefined') relays.forEach((r, i) => {
@@ -8988,7 +8993,7 @@ function updateDepots_(dt) {
     el.style.color = '#ff6a3c';
     el.style.left = (v.x * 0.5 + 0.5) * innerWidth + 'px';
     el.style.top = (-v.y * 0.5 + 0.5) * innerHeight + 'px';
-    el.textContent = `POWER RELAY ${Math.round(c.distanceTo(S.pos))}m`;
+    el.textContent = zh(`POWER RELAY ${Math.round(c.distanceTo(S.pos))}m`);
   });
 }
 const relayLabels = [];
@@ -9247,7 +9252,7 @@ function updateUltron(dt) {
   if (U.dustAt && now >= U.dustAt) { U.dustAt = 0; if (U.alive) damage(U, 12); }
   U.hitFlash = (U.hitFlash || 0) * Math.exp(-dt * 8);
   if (U.alive) {
-    bossBarEl.firstChild.nodeValue = 'ULTRON';
+    bossBarEl.firstChild.nodeValue = '奥创';
     bossBarEl.lastChild.firstChild.style.transform = `scaleX(${clamp(U.hp / ULTRON_HP, 0, 1)})`;
   }
   const set = (st) => { U.state = st; U.st = 0; U.done = false; U.shots = 0; };
@@ -9701,8 +9706,8 @@ function startCine(obj, H, title, sub, outward = null) {
   const face = outward ? Math.atan2(outward.x, outward.z) : obj.rotation.y;
   const a0 = face - (outward ? 1.6 : 1.2);
   cine = { obj, H, t: 0, a0, sweep: outward ? 1.6 : 1.2 };
-  cineEl.querySelector('h3').textContent = title;
-  cineEl.querySelector('p').textContent = sub;
+  cineEl.querySelector('h3').textContent = zh(title);
+  cineEl.querySelector('p').textContent = zh(sub);
   cineEl.style.display = 'block';
   document.getElementById('hud').style.visibility = 'hidden';
   S.invuln = Math.max(S.invuln, now + CINE_T + 1.5);
@@ -9789,7 +9794,7 @@ $('credit').textContent = (suitRoot ? 'Iron Man Mark 85 by LLlypuk (CC BY 4.0, d
   + (!CITY ? ' · MAZ-543 launcher by Muhamad Mirza Arrafi (CC BY 4.0) · F-22 Raptor by andertan (CC BY 4.0) · Hammer Drone by KenzoDkohno22T (CC BY 4.0) · KSK operator (Extremis) by 42manako (CC BY 4.0) · Military building by TampaJoey (CC BY 4.0)' : '')
   + (bossProto && !CITY ? ' · Boss: Mark 44 Hulkbuster by Ahad4940 (CC BY 4.0, recolored & rigged)' : '')
   + (CITY ? ' · Street trees: Realistic Tree by Daniel (CC BY 4.0) · Map data © OpenStreetMap contributors (ODbL) · Textures: Poly Haven (CC0) · People & animations: Mixamo · NYC Taxi by Pavel Kovalevich (CC BY 4.0) · Alfa Romeo 4C by Ddiaz Design (CC BY-NC-SA 4.0) · Chrysler Building by mohamedhussien (CC BY 4.0, cropped) · Empire State Building by Brian Trepanier (CC BY 4.0, cropped) · SWAT officers: Mixamo · HK416 by Derek Flanagan (CC BY 4.0)' : ' · Environment: Poly Haven (CC0) · Shipping containers by Sousinho, Sebastian Webster & others on Sketchfab · Tanker wagon on Sketchfab · HESCO barrier by polbrainstorm (CC BY 4.0) · Watch tower by _SeF_ (CC BY 4.0) · Military tent by dark-minaz (CC BY 4.0) · Soldiers & animations: Mixamo · HK416 by Derek Flanagan (CC BY 4.0) · RPG-7 by paolinorenzo (CC BY 4.0)');
-$('startMsg').textContent = 'Click to start · Esc to exit';
+$('startMsg').textContent = '点击开始 · 按 Esc 退出';
 $('startSub').textContent = suitRoot ? '' : 'Suit model not found — using placeholder';
 document.getElementById('bar').style.display = 'none';
 // ---- 来袭预警：2.5 秒内会飞到身边 8 米内的炮弹、导弹，在屏幕上圈出来；在屏幕外就在边上画箭头指过去 ----
@@ -9827,8 +9832,8 @@ function updateThreats() {
   }
   for (let i = n; i < threatEls.length; i++) threatEls[i].style.display = 'none';
   const w = $('warn');
-  if (missile) { w.textContent = 'MISSILE INCOMING'; w.style.display = Math.sin(now * 12) > -0.3 ? 'block' : 'none'; }
-  else if (lockT < Infinity) { w.textContent = `MISSILE LOCK · ${Math.max(1, Math.round(lockT))}s`; w.style.display = 'block'; }
+  if (missile) { w.textContent = '导弹来袭'; w.style.display = Math.sin(now * 12) > -0.3 ? 'block' : 'none'; }
+  else if (lockT < Infinity) { w.textContent = `导弹锁定 · ${Math.max(1, Math.round(lockT))} 秒`; w.style.display = 'block'; }
   else w.style.display = 'none';
   // 报警声：快击中时急促；被锁定时按预计命中时间，越近越急
   if ((missile || lockT < Infinity) && now > nextLockBeep) { sfx.lock(missile ? 1 : 0.6); nextLockBeep = now + (missile ? 0.28 : clamp(lockT / 8, 0.3, 1)); }
@@ -9837,8 +9842,8 @@ function updateThreats() {
 // ---- 过关画面：用时、击毁数、挨的伤害、闪避次数，按用时和伤害评级 ----
 function showVictory(who = 'IRON MONGER') {
   victoryShown = true;
-  $('vSub').textContent = who + ' DESTROYED' + (S.compromised ? ' · ' + S.compromised : '');
-  const vh = document.querySelector('#victory h2'); vh.textContent = S.compromised ? 'MISSION FAILED' : 'MISSION COMPLETE'; vh.style.color = S.compromised ? '#ff4a36' : '';
+  $('vSub').textContent = zh(who + ' DESTROYED' + (S.compromised ? ' · ' + S.compromised : ''));
+  const vh = document.querySelector('#victory h2'); vh.textContent = S.compromised ? '任务失败' : '任务完成'; vh.style.color = S.compromised ? '#ff4a36' : '';
   S.missionEnd = now;
   const T = Math.max(0, now - Math.max(0, S.missionStart)), st = S.stats;
   const mm = Math.floor(T / 60), ss = Math.floor(T % 60).toString().padStart(2, '0');
@@ -9856,7 +9861,7 @@ function showVictory(who = 'IRON MONGER') {
   const fmt = t => `${Math.floor(t / 60)}:${Math.floor(t % 60).toString().padStart(2, '0')}`;
   const bestTxt = T < best ? (best < Infinity ? `NEW BEST (was ${fmt(best)})` : 'FIRST CLEAR') : fmt(best);
   $('vRank').innerHTML = (S.compromised ? 'F' : rank) + (ghost && !S.compromised ? '<div style="font-size:16px;letter-spacing:.5em;color:#7dffb0;margin-top:6px">GHOST</div>' : '');
-  const row = ([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`, head = t => `<tr><td colspan="2" style="padding-top:10px;color:#ffb347;letter-spacing:.3em">${t}</td></tr>`;
+  const row = ([k, v]) => `<tr><td>${zh(k)}</td><td>${zh(String(v))}</td></tr>`, head = t => `<tr><td colspan="2" style="padding-top:10px;color:#ffb347;letter-spacing:.3em">${zh(t)}</td></tr>`;
   // 两栏：左边任务、右边战斗（一栏排下来太长，会把顶上的标题挤出屏幕）
   const col = rows => `<td style="vertical-align:top;padding:0 28px"><table>${rows.join('')}</table></td>`;
   $('vStats').innerHTML = '<tr>' + col([
@@ -9950,9 +9955,64 @@ function drawRadar() {
 }
 // 准星下方的短提示（肩炮锁定数量等），1.5 秒后淡出
 let noticeTimer = 0;
+
+// ---- 中文：屏幕提示、准星标签、Boss 名、结算表都过一遍 zh()；按「 · 」分段逐段翻，带数字的按规则换 ----
+const ZH_SEG = {
+  'AIRSPACE VIOLATION': '闯入管制空域', 'F-22 INTERCEPT': 'F-22 拦截', 'DO NOT ENGAGE': '不要交火', 'CHECKPOINT ALARM': '检查站拉响警报', 'NEAREST OUTPOST ALERTED': '最近的营地已收到警报',
+  'CONVOY DESTROYED': '车队已摧毁', 'DRONES CLEARED': '无人机已清除', 'DRONES INBOUND': '无人机来袭', 'EMP HIT': '被电磁脉冲击中', 'THRUSTERS OFFLINE': '推进器失灵', 'ENEMY RADIO': '敌方无线电',
+  'ARTILLERY INCOMING': '炮击来袭', 'GUNSHIP INBOUND': '武装直升机来袭', 'EXTREMIS ON SUIT': '绝境战士扒在战衣上', 'DODGE (⌥) TO SHAKE IT OFF': '按 ⌥ 闪避把它甩掉', 'EXTREMIS SOLDIER DOWN': '绝境战士已消灭',
+  'EXTREMIS THROWN OFF': '甩掉了绝境战士', 'F-22s DISENGAGING': 'F-22 脱离', 'RETURNING TO BASE': '返航', 'FOX TWO': '敌机发射导弹', 'MISSILE INBOUND': '导弹来袭', 'FLARES (X)': '放干扰弹（X）',
+  'FRIENDLY AIRCRAFT HIT': '误击友军飞机', 'CEASE FIRE': '停火', 'FRIENDLY PILOT KILLED': '友军飞行员死亡', 'GROUND POUND': '重拳砸地', 'GULMIRA LIBERATED': '古尔米拉已解放', 'REPAIR PAD ONLINE': '维修台启用',
+  'THE VILLAGE IS YOUR BASE NOW': '村子现在是你的基地', 'GUNSHIP DOWN': '武装直升机已击落', 'HAMMER DRONE DOWN': '汉默无人机已击毁', 'HANGAR DOOR BREACHED': '仓库大门已炸开', 'STARK WEAPONS INSIDE': '里面是斯塔克武器',
+  'HIT': '被击中', 'THRUSTERS DOWN': '推进器失灵', 'HOSTILE RADIOING FOR SUPPORT': '敌人正在呼叫支援', 'HOSTILE SURRENDERED': '敌人投降', 'HOLD FIRE': '别开枪', 'IRON MONGER DEFEATED': '铁霸王已击败',
+  'IRON MONGER': '铁霸王', 'JAMMER SIGNAL DETECTED': '发现干扰信号', 'JET DOWN': '战机被击落', 'PILOT EJECTED': '飞行员已弹射', 'MISSION PENALTY': '任务扣分', 'KAMIKAZE DRONES': '自杀式无人机',
+  'MISSION COMPROMISED': '任务已判失败', 'TOO MANY HOSTAGES DIED': '死亡人质过多', 'FINISH THE FIGHT': '把仗打完', 'YOU KILLED A U.S. AIR FORCE PILOT': '你杀死了美国空军飞行员', 'U.S. AIR FORCE PILOT KILLED': '杀死了美国空军飞行员',
+  'PILOT KILLED': '杀死了飞行员', 'PERF LOG SAVED': '性能记录已保存', '~/Downloads': '已存到下载文件夹', 'PILOT ON THE GROUND': '飞行员已落地', 'ALIVE': '平安', 'RADAR DESTROYED': '雷达站已摧毁',
+  'NO MORE DRONE REINFORCEMENTS': '不会再有无人机增援', 'REPAIR PAD': '维修台', 'ARMOR & SHIELD RESTORED': '装甲和护盾已修复', 'RESTRICTED AIRSPACE': '管制空域', 'TRANSPONDER DETECTED': '已被雷达识别',
+  'RETURN TO COMBAT ZONE': '返回作战区域', 'SAM LAUNCH': '防空导弹发射', 'SAM SITE DESTROYED': '防空导弹车已摧毁', 'SANDSTORM INCOMING': '沙尘暴来袭', 'SCANNING…': '扫描中…', 'SENTRIES SUMMONED': '哨兵机器人已召唤',
+  'SHIELD DOWN': '护盾已破', 'DESTROY THE NODE': '摧毁信号节点', 'STARK MISSILE INTERCEPTED': '斯塔克导弹已拦截', 'STARK MISSILE LAUNCHED': '斯塔克导弹已发射', 'INTERCEPT IT': '快拦截',
+  'SUPPLY CACHE': '补给点', 'SURRENDERED HOSTILE KILLED': '杀害了投降的敌人', 'TEN RINGS ON HIGH ALERT': '十戒帮全面戒备', 'ARMOR INBOUND': '装甲部队来袭', 'THRUSTERS ONLINE': '推进器启动',
+  'TRANSMISSION CUT': '无线电已切断', 'ULTRON DEFEATED': '奥创已击败', 'ULTRON': '奥创', 'ULTRON SENTRIES INBOUND': '奥创哨兵来袭', 'VILLAGE HIT': '村子被击中', 'CIVILIAN CASUALTIES': '平民伤亡',
+  'NO SIGNAL IN RANGE': '范围内没有信号', 'FAINT NODE SIGNAL': '微弱的节点信号', 'OBJECTIVE': '任务目标', 'DESTROY 4 CLOAKED JAMMER NODES': '摧毁 4 个隐形干扰节点', 'ROOFTOPS': '在楼顶',
+  'LIBERATE GULMIRA': '解放古尔米拉', 'TEN RINGS OCCUPY THE VILLAGE': '十戒帮占领了村子', 'HOSTAGE EXECUTED': '人质被处决', 'HOSTAGE KILLED': '人质被误伤致死', 'COLLATERAL DAMAGE': '误伤',
+  'INTEL': '情报', 'HOSTAGES': '人质', 'VILLAGERS': '村民', 'RADAR DATA': '雷达数据', 'NO NEW LOCATIONS': '没有新的位置', 'HOSTAGES AT ROAD CHECKPOINTS MAY KNOW MORE': '公路检查站的人质可能知道更多',
+  'RED BEACONS': '找红色信标', 'VILLAGERS TAKEN HOSTAGE': '村民被劫持', 'OASIS VILLAGE UNDER ATTACK': '绿洲村庄遇袭', 'IRON MONGER IS DESTROYING THE VILLAGE': '铁霸王正在摧毁村子',
+  'VILLAGE UNDER ATTACK': '村子遭到炮击', 'DAWN': '天亮了', 'DUSK FALLS': '黄昏', 'NIGHTFALL': '入夜', 'HIDDEN CAVE DISCOVERED': '发现隐藏的山洞', 'WEAPONS CACHE': '武器库',
+  'WEAPONS DEPOT SPOTTED': '发现武器库', 'ARMORED HANGAR': '仓库有能量护罩', 'BLAST THE DOOR': '先炸开大门', 'SHOOT THROUGH THE DOOR': '从大门往里打', 'GENERATORS DOWN': '发电机全部炸毁',
+  'BLAST WALLS RETRACTING': '防爆钢板降下', 'FLARES': '干扰弹', 'ALARM RAISED': '警报拉响', 'OUTPOST ON ALERT': '营地进入戒备', 'OUTPOST ALARM RAISED': '营地拉响警报', 'SUPERCRUISE': '超音速巡航',
+  'NO TARGET': '没有目标', 'DARK MODE': '潜行模式', 'LIGHTS OFF': '关灯', 'DARK MODE OFF': '潜行模式关闭', 'SUIT OFFLINE': '战衣宕机', 'REBOOTING': '正在重启', 'EMP': '电磁脉冲', 'SUIT CRITICAL': '战衣严重受损',
+  'SHIELDED': '有护盾', 'MISSILE INCOMING': '导弹来袭', 'BLAST SHUTTER': '防爆钢板', 'DEPOT LOCKDOWN': '武器库封锁', 'LOCKDOWN': '封锁', 'FLARES RECHARGING': '干扰弹冷却中', 'GENERATOR DOWN': '发电机已炸毁',
+  'HAMMER DRONES INBOUND': '汉默无人机来袭', 'HOSTAGES RESCUED': '人质已获救', 'OFFICER DOWN': '小队长被打倒', 'HOSTILES BREAKING': '敌人溃散', 'POWER RELAY DOWN': '供能塔已摧毁',
+  'RESCUED VILLAGERS ARRIVED HOME': '获救的村民回到了村子', 'SCAN RECHARGING': '扫描冷却中', 'VILLAGER KILLED IN SHELLING': '村民在炮击中死亡', 'TARGETS LOCKED': '已锁定目标', 'SCAN': '扫描',
+  'DEPOT DESTROYED': '武器库已摧毁', 'NODE DESTROYED': '干扰节点已摧毁', 'ALL DEPOTS DESTROYED': '武器库全部摧毁', 'ALL NODES DESTROYED': '干扰节点全部摧毁', 'HEAVY ASSAULT ARMOR': '重型突击装甲',
+  'THERE ARE NO STRINGS ON ME': '我身上没有牵线', 'JAMMER NODE': '干扰节点', 'WEAPONS DEPOT': '武器库', 'POWER RELAY': '供能塔', 'SAM SITE': '防空导弹车', 'GENERATOR': '发电机', 'HANGAR DOOR': '仓库大门',
+  'WEAPONS HANGAR': '武器仓库', 'MISSION COMPLETE': '任务完成', 'MISSION FAILED': '任务失败', 'SCORE': '得分', 'TIME': '用时', 'BEST TIME': '最快用时', 'RUNS ON THIS MAP': '这张地图玩过', 'FIRST CLEAR': '首次通关',
+  'HOSTAGES RESCUED ': '救出人质', 'HOSTAGES LOST': '死亡人质', 'STARK MISSILES INTERCEPTED': '拦截斯塔克导弹', 'VILLAGE HITS': '村庄受损', 'ALARMS RAISED': '拉响警报', 'TIMES DETECTED': '被发现次数',
+  'FRIENDLY FIRE': '误伤友军', 'MISSION': '任务', 'COMBAT': '战斗', 'TANKS DESTROYED': '摧毁坦克', 'DRONES DOWNED': '击落无人机', 'SENTRIES DOWNED': '击毁哨兵', 'HAMMER DRONES': '击毁汉默无人机',
+  'EXTREMIS SOLDIERS': '消灭绝境战士', 'DEPOTS DESTROYED': '摧毁武器库', 'NODES DESTROYED': '摧毁干扰节点', 'HELICOPTERS DOWNED': '击落直升机', 'SAM SITES DESTROYED': '摧毁防空导弹车', 'MISSILES INTERCEPTED': '拦截导弹',
+  'HOSTILES KILLED': '消灭敌人', 'SURRENDERS ACCEPTED': '接受投降', 'DAMAGE TAKEN': '受到伤害', 'DODGES': '闪避次数', 'IRON MONGER DESTROYED': '铁霸王已摧毁', 'ULTRON DESTROYED': '奥创已摧毁',
+};
+const ZH_RE = [
+  [/^(\d+(?:\.\d+)?) km$/, '$1 公里'], [/^(\d+) O'CLOCK$/, '$1 点钟方向'], [/^~(\d+) m$/, '约 $1 米'], [/^LOST (\d+)\/(\d+)$/, '已死 $1/$2'], [/^(\d+) LEFT$/, '还剩 $1'],
+  [/^EXECUTION IN (\d+)s$/, '$1 秒后处决'], [/^(\d+)s$/, '$1 秒'], [/^DESTROY (\d+) GENERATORS?$/, '炸掉 $1 台发电机'], [/^DESTROY (\d+) WEAPONS DEPOTS$/, '摧毁 $1 个武器库'],
+  [/^(\d+) OF (\d+) DEPOTS LOCATED$/, '已知 $1 个武器库（共 $2 个）'], [/^(CAVE WEAPONS CACHE|WEAPONS DEPOT) LOCATED$/, (m, a) => (a === 'WEAPONS DEPOT' ? '一个武器库' : '山洞武器库') + '位置已标出'],
+  [/^IRON MONGER ATTACKING THE (VILLAGE|OASIS|OIL FIELD|RADAR STATION)$/, (m, a) => '铁霸王正在袭击' + ({ VILLAGE: '村子', OASIS: '绿洲', 'OIL FIELD': '油田', 'RADAR STATION': '雷达站' })[a]],
+  [/^CIVILIAN CASUALTIES (\d+)$/, '平民伤亡 $1'], [/^FOLLOW THE BEAMS?$/, '顺着光束找'], [/^DESTROY (\d+) POWER RELAYS?$/, '摧毁 $1 座供能塔'], [/^(\d+) RELAYS? LEFT$/, '还剩 $1 座供能塔'],
+  [/^WAVE (\d+)$/, '第 $1 波'], [/^(\d+) MISSILES? DECOYED$/, '骗走 $1 枚导弹'], [/^MACH (\d+)$/, '$1 马赫'], [/^(\d+) SIGNALS? FOUND$/, '发现 $1 个信号'],
+  [/^(DEPOT|NODE) (\d+)m$/, (m, a, d) => (a === 'DEPOT' ? '武器库 ' : '干扰节点 ') + d + ' 米'], [/^POWER RELAY (\d+)m$/, '供能塔 $1 米'], [/^(\d+) HOSTAGES DIED$/, '死了 $1 个人质'],
+  [/^NEW BEST \(was (.+)\)$/, '新纪录（原来 $1）'], [/^(\d+) JET DOWN$/, '击落 $1 架战机'],
+];
+function zh(text) {
+  return String(text).split(' · ').map(seg => {
+    const k = seg.trim();
+    if (ZH_SEG[k]) return ZH_SEG[k];
+    for (const [re, to] of ZH_RE) if (re.test(k)) return k.replace(re, to);
+    return seg;
+  }).join(' · ');
+}
 function notice(text, color, ms = 1500) {
   const el = $('notice');
-  el.textContent = text;
+  el.textContent = zh(text);
   el.style.color = color;
   el.style.opacity = 1;
   clearTimeout(noticeTimer);
@@ -9972,7 +10032,7 @@ function updateHud(dt) {
   hud.hurt.style.opacity = Math.min(1, S.hurtFlash + (critical ? 0.25 + 0.2 * Math.sin(now * 8) : 0) + (S.down ? 0.6 : 0));
   const empOn = now < (S.empUntil || 0) && !S.down;
   hud.alert.style.display = S.down || critical || empOn ? 'block' : 'none';
-  hud.alert.textContent = S.down ? 'SUIT OFFLINE · REBOOTING' : empOn ? 'EMP · THRUSTERS OFFLINE' : 'SUIT CRITICAL';
+  hud.alert.textContent = S.down ? '战衣宕机 · 正在重启' : empOn ? '电磁脉冲 · 推进器失灵' : '战衣严重受损';
   hud.alert.style.opacity = S.down || Math.sin(now * (empOn ? 14 : 8)) > 0 ? 1 : 0.35;
   hud.snap.style.opacity = S.snapFlash;
   hud.cross.classList.toggle('lock', !!aim.target);
@@ -9982,7 +10042,7 @@ function updateHud(dt) {
   if (tname && tg.alive) {
     const shielded = tg.kind === 'hut' || (tg.kind === 'door' && tg.depot.lockdown && gensUp(tg.depot)) || tg.kind === 'depot' && (tg.node ? tg.relays.some(r => r.alive) : tg.lockdown && gensUp(tg));
     const full = tg.kind === 'depot' ? DEPOT_HP : tg.kind === 'relay' ? 4 : tg.kind === 'generator' ? 3 : tg.kind === 'door' ? DOOR_HP : SAM_HP, n = Math.ceil(clamp(tg.hp / full, 0, 1) * 8);
-    tt.textContent = tname + '  ' + (shielded ? 'SHIELDED' : '▮'.repeat(n) + '▯'.repeat(8 - n));
+    tt.textContent = zh(tname) + '  ' + (shielded ? '有护盾' : '▮'.repeat(n) + '▯'.repeat(8 - n));
     tt.style.display = 'block';
   } else tt.style.display = 'none';
   const cds = [1 - S.repCd / REP_CD, S.uni.state === 'idle' ? 1 - S.uni.cd / 4 : 0, S.laser.on ? 1 - S.laser.t / LASER_MAX : 1 - S.laser.cd / 3, 1 - S.gun.cd / 3.5,
@@ -10007,14 +10067,14 @@ function updateHud(dt) {
   hudT -= dt;
   if (hudT > 0) return;
   hudT = 0.1;
-  hud.mode.textContent = `WAVE ${S.wave} · ` + (depots.length ? `${OBJ_NAME}S ${depots.filter(d => !d.alive).length}/${depots.length} · ` : '') + (S.flying ? (S.scOn ? 'SUPERCRUISE' : key.ShiftLeft || key.ShiftRight ? 'BOOST' : 'FLIGHT') : S.takeoffT >= 0 ? 'LIFTOFF' : 'GROUND');
+  hud.mode.textContent = `第 ${S.wave} 波 · ` + (depots.length ? `${CITY ? '干扰节点' : '武器库'} ${depots.filter(d => !d.alive).length}/${depots.length} · ` : '') + (S.flying ? (S.scOn ? '超音速巡航' : key.ShiftLeft || key.ShiftRight ? '加速' : '飞行') : S.takeoffT >= 0 ? '起飞' : '地面');
   hud.alt.textContent = (S.pos.y - terrainH(S.pos.x, S.pos.z)).toFixed(0);
   hud.spd.textContent = (S.vel.length() * 3.6).toFixed(0);
   const vk = visibility(), vn = Math.round(vk * 8);
   $('visBar').textContent = '▮'.repeat(vn) + '▯'.repeat(8 - vn);
   $('visBar').style.color = vk < 0.25 ? '#7dffb0' : vk < 0.6 ? '#ffd27a' : '#ff6a4d';
-  $('darkTag').textContent = S.dark ? 'DARK' : '';
-  hud.fps.textContent = `Quality ${Math.round(QUALITY[qIdx] * 100)}%${qAuto ? ' (auto)' : ''} · ${fps} FPS`;
+  $('darkTag').textContent = S.dark ? '潜行' : '';
+  hud.fps.textContent = `画质 ${Math.round(QUALITY[qIdx] * 100)}%${qAuto ? '（自动）' : ''} · ${fps} FPS`;
 }
 
 /* ================= 音效（Web Audio 实时合成：不用音频文件，没有版权问题） ================= */
