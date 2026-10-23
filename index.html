@@ -137,7 +137,6 @@ canvas{display:block}
     <div><kbd>X</kbd>干扰弹（骗走导弹）</div>
     <div><kbd>K</kbd>全屏　<kbd>Esc</kbd>暂停</div>
     <div><kbd>P</kbd>画质　<kbd>M</kbd>静音　<kbd>H</kbd>隐藏说明</div>
-    <div><kbd>L</kbd>保存性能记录</div>
   </div>
   <div id="fps"></div>
   <canvas id="radar" width="360" height="360"></canvas>
@@ -10575,7 +10574,7 @@ let idleTick = 0;
 const PERF_N = 5400, perf = { i: 0, n: 0, last: 0, rows: new Array(PERF_N), events: [], long: [] };
 const perfT = () => +(performance.now() / 1000).toFixed(3);
 const perfEv = (type, extra) => { perf.events.push([perfT(), type, extra ?? null]); if (perf.events.length > 2000) perf.events.splice(0, 500); };
-addEventListener('keydown', e => { if (!e.repeat && ['KeyQ', 'KeyR'].includes(e.code)) perfEv(e.code + ' down'); if (e.code === 'KeyL' && !e.repeat && !e.metaKey && !e.ctrlKey) savePerf(); });
+addEventListener('keydown', e => { if (!e.repeat && ['KeyQ', 'KeyR'].includes(e.code)) perfEv(e.code + ' down'); });   // （L 键保存性能记录已去掉；要排查卡顿时在控制台调 savePerf()）
 addEventListener('keyup', e => { if (['KeyQ', 'KeyR'].includes(e.code)) perfEv(e.code + ' up'); });
 addEventListener('mousedown', e => { if (e.button === 2) perfEv('RMB down'); });
 try { new PerformanceObserver(l => { for (const e of l.getEntries()) { perf.long.push([+(e.startTime / 1000).toFixed(3), Math.round(e.duration)]); if (perf.long.length > 500) perf.long.shift(); } }).observe({ type: 'longtask', buffered: false }); } catch (e) {}
@@ -10590,6 +10589,7 @@ function perfLog(t0, t1, t2) {
   perf.i = (perf.i + 1) % PERF_N;
   perf.n = Math.min(perf.n + 1, PERF_N);
 }
+window.savePerf = () => savePerf();   // 模块里的函数控制台调不到，挂到 window 上
 function savePerf() {
   const rows = [];
   for (let k = 0; k < perf.n; k++) rows.push(perf.rows[(perf.i - perf.n + k + PERF_N) % PERF_N]);
