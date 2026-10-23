@@ -118,7 +118,7 @@ canvas{display:block}
     <div class="w" id="w1">胸口光束<em>右键 / R</em><u></u></div>
     <div class="w" id="w2">激光<em>Q</em><u></u></div>
     <div class="w" id="w3">肩炮<em>E</em><u></u></div>
-    <div class="w" id="w4" style="display:none">Snap<em>F</em><u></u></div>
+    <div class="w" id="w4">导弹<em>T</em><u></u></div>
     <div class="w" id="w5">闪避<em>⌥ / ALT</em><u></u></div>
   </div>
   <div id="help">
@@ -132,6 +132,7 @@ canvas{display:block}
     <div><kbd>右键 / R</kbd>胸口光束 · 敌人贴脸时抓起来扔出去</div>
     <div><kbd>Q</kbd>小臂激光（按住）</div>
     <div><kbd>E</kbd>肩炮 · 自动锁定</div>
+    <div><kbd>T</kbd>追踪导弹 · 打坦克、飞机、斯塔克导弹</div>
     <div><kbd>Tab</kbd>扫描 · 找出隐形节点（纽约）</div>
     <div><kbd>V</kbd>面甲　<kbd>G</kbd>潜行模式（关灯）</div>
     <div><kbd>X</kbd>干扰弹（骗走导弹）</div>
@@ -2964,7 +2965,7 @@ uniBeam.traverse(o => o.frustumCulled = false);
 scene.add(uniBeam);
 
 // 小臂激光：细而直的红色光束，白色内芯
-const LASER_MAX = 2.5;
+const LASER_MAX = 2.5, LASER_RANGE = 100, UNI_RANGE = 1000, LASER_JET_R = 0;   // Q 激光不再自动追飞机（改用肩炮导弹）
 const LASER_COL = new THREE.Color(1, 0.3, 0.15);
 const laserBeam = new THREE.Group();
 const laserOuter = new THREE.Mesh(beamGeo, uniMat(new THREE.Color(5, 0.5, 0.25)));
@@ -3403,6 +3404,7 @@ addEventListener('keydown', e => {
     else lastTap[e.code] = now;
   }
   if (e.code === 'KeyE') fireGuns();
+  if (e.code === 'KeyT') fireMinis();
   if (e.code === 'Tab') { e.preventDefault(); startScan(); }
   // F 响指（无限宝石）已去掉；C：在地上蹲下 / 站起（空中 C 还是下降）
   if (e.code === 'KeyC' && !S.flying && !S.down) { S.crouchOn = !S.crouchOn; sfx.servo?.(); }
@@ -3435,7 +3437,7 @@ function aimPoint() {
     const v = _jl.copy(j.g.position).sub(ray.ray.origin), along = v.dot(ray.ray.direction);
     const r = j.kind === 'smissile' ? Math.max(12, along * 0.09) : Math.max(8, along * 0.05);
     const off = v.addScaledVector(ray.ray.direction, -along).length();
-    if (along > minDist && along < 1000 && off < r && off / r < snapD) { snap = j; snapD = off / r; }
+    if (along > minDist && along < (j.kind === 'smissile' ? 1000 : 900) && off < r && off / r < snapD) { snap = j; snapD = off / r; }
   }
   const hits = ray.intersectObjects(list, true);
   if (snap) { const d = snap.g.position.distanceTo(ray.ray.origin), h = hits.find(o => o.distance >= minDist); if (!h || h.distance > d - 15) return { point: snap.g.position.clone(), target: snap, normal: null }; }
@@ -3522,6 +3524,9 @@ function supportH(x, z, y) {
   near = nearBlockers(_cA.set(x, y, z), 3);
   const hit = castBlock(_cA.set(x, y + 0.6, z), DOWN, 80);
   if (hit) g = Math.max(g, hit.point.y);
+  // 仓库能量护罩：落在罩子顶上就站在罩面上（以前脚踩着里面的屋顶、半个身子陷进罩子）
+  const shTop = shieldTopAt(x, z, y);
+  if (shTop !== null) g = Math.max(g, shTop);
   // 维修停机坪：站在台面上（以前没碰撞，脚陷在台子里）
   if (homePad && y >= homePad.top - 0.6 && Math.hypot(x - homePad.p.x, z - homePad.p.z) < 5.1) g = Math.max(g, homePad.top);
   for (const t of tanks) {
@@ -3576,6 +3581,8 @@ function applyDash(dt) {
 
 /* ================= 移动 / 飞行 ================= */
 function physics(dt) {
+  // 近身连招、抓人扔出去时锁定的朝向：动作做完就解除（以前一直不解除，之后开火身体还朝着那个旧方向——往左转、背对着准星开炮）
+  if (S.faceYawUntil && now > S.faceYawUntil) { S.faceYaw = undefined; S.faceYawUntil = 0; }
   const fx = Math.sin(camYaw), fz = Math.cos(camYaw);
   const right = new V3(-fz, 0, fx);
   const ix = S.down || S.knock ? 0 : (key.KeyD ? 1 : 0) - (key.KeyA ? 1 : 0), iz = S.down || S.knock ? 0 : (key.KeyW ? 1 : 0) - (key.KeyS ? 1 : 0);
@@ -3652,7 +3659,7 @@ function physics(dt) {
       }
     }
     S.pos.add(move);
-    if (!S.vault) pushOut(S.pos);
+    if (!S.vault) { pushOut(S.pos); shieldPush(S.pos); }
     const sup = S.vault ? S.pos.y : supportH(S.pos.x, S.pos.z, S.pos.y);
     // 从屋顶、石头上走出边缘：战衣自动悬停，不会一下掉到地上
     if (S.vault) {}
@@ -3689,7 +3696,7 @@ function physics(dt) {
     if (S.dropIn) { S.vel.set(0, Math.max(S.vel.y - 40 * dt, -55), 0); camYaw = S.dropYaw; camPitch = -0.1; }
     else if (S.knock) {
       // 翻滚下坠 1.3 秒后推进器重启，在空中稳住（以前要一路掉到地上，高空被打中要好几秒动不了）；离地 12 米以内才真的摔下去
-      if (now - S.knock > 1.3 && S.pos.y - supportH(S.pos.x, S.pos.z, S.pos.y) > 12 && !S.down) { S.knock = 0; S.vel.y *= 0.2; sfx.powerUp?.(); notice('THRUSTERS ONLINE', '#8fe3ff', 1200); }
+      if (now - S.knock > KNOCK_T && S.pos.y - supportH(S.pos.x, S.pos.z, S.pos.y) > 12 && !S.down) { S.knock = 0; S.vel.y *= 0.2; sfx.powerUp?.(); notice('THRUSTERS ONLINE', '#8fe3ff', 1200); }
       // 被击落：水平方向慢慢减速，竖直方向按重力加速往下掉（最快 40 米/秒）
       const k = Math.exp(-0.7 * dt);
       S.vel.x *= k; S.vel.z *= k;
@@ -3716,6 +3723,7 @@ function physics(dt) {
     collideMove(S.pos, move, S.vel);
     S.pos.add(move);
     pushOut(S.pos);
+    shieldPush(S.pos);
     const gy = supportH(S.pos.x, S.pos.z, S.pos.y);
     if (S.pos.y <= gy) {
       S.pos.y = gy;
@@ -3815,7 +3823,7 @@ function tryMelee() {
   if (now - (S.meleeAt ?? -9) > 2) S.meleeN = -1;   // 2 秒没出手：连招从头开始
   S.meleeAt = now;
   const name = COMBO[(S.meleeN = (S.meleeN ?? -1) + 1) % COMBO.length], K = ACT_KEY[name];
-  S.yaw = S.faceYaw = Math.atan2(best.g.position.x - S.pos.x, best.g.position.z - S.pos.z);
+  S.yaw = S.faceYaw = Math.atan2(best.g.position.x - S.pos.x, best.g.position.z - S.pos.z); S.faceYawUntil = now + 1.2;
   playAct(name, { from: K.from, dur: K.dur, hitAt: K.hit - K.from, target: best });
   sfx.servo?.();
   return true;
@@ -4394,7 +4402,7 @@ function damage(t, amt) {
     t.hp -= amt; if (t.hp <= 0 && t.alive) blowDoor(t);
     return;
   }
-  if (t.kind === 'depot' && t.lockdown && t.wallK > 0.5 && gensUp(t)) {
+  if (t.kind === 'depot' && t.lockdown && t.wallK > 0.5 && gensUp(t) && !inHangar(t)) {
     for (let i = 0; i < 6; i++) emit(_a.copy(t.g.position).add(_b.set((rnd() - 0.5) * 12, 1 + rnd() * 3, (rnd() - 0.5) * 12)), randDir(_v).multiplyScalar(4), 0.3, 0.2, 2);
     if (now - (S.lockNote ?? -9) > 3) { S.lockNote = now; notice(`LOCKDOWN · DESTROY ${t.gens.filter(o => o.alive).length} GENERATOR${t.gens.filter(o => o.alive).length > 1 ? 'S' : ''}`, '#ff8a5c'); }
     return;
@@ -4432,7 +4440,7 @@ function damage(t, amt) {
 }
 
 // 掌心炮的能量弹：一团短而亮的光弹从掌心飞向目标（不是一整条光柱），到了再炸开
-const REP_SPEED = 160, REP_CD = 0.35;
+const REP_SPEED = 160, REP_CD = 0.35, REP_RANGE = 250;
 const repBolts = Array.from({ length: 6 }, () => {
   const g = new THREE.Group();
   const core = new THREE.Mesh(beamGeo, uniMat(new THREE.Color(5, 6, 7)));
@@ -4469,10 +4477,13 @@ function updateRepBolts(dt) {
 function fireRepulsor(hand = 'R') {
   const from = suit.emit['emit_palm_' + hand].getWorldPosition(new V3());
   const wall = clipShot(from, aim.point, aim.target);
-  const to = wall ?? aim.point.clone();
+  let to = wall ?? aim.point.clone();
+  // 射程 250 米：再远光弹在半空散掉，打不到东西（以前跟准星一样 600 米，太远）
+  const outR = from.distanceTo(to) > REP_RANGE;
+  if (outR) to = from.clone().add(_d.copy(to).sub(from).setLength(REP_RANGE));
   const b = repBolts.find(o => !o.live) || repBolts[0];
   // 打在墙上、地上（不是打中敌人）才留弹痕
-  Object.assign(b, { dist: from.distanceTo(to), t: 0, live: true, mark: wall ? shotN.clone() : aim.target ? null : aim.normal?.clone() });
+  Object.assign(b, { dist: from.distanceTo(to), t: 0, live: true, mark: outR ? null : wall ? shotN.clone() : aim.target ? null : aim.normal?.clone() });
   b.from.copy(from);
   b.to.copy(to);
   // 掌心一圈能量冲击
@@ -4484,7 +4495,7 @@ function fireRepulsor(hand = 'R') {
   S.repCd = REP_CD;
   playerNoise();
   // 掌心炮适合打无人机、导弹；对坦克装甲伤害打折扣（打坦克用激光最快）
-  if (aim.target && !wall) damage(aim.target, aim.target.kind === 'tank' ? 0.6 : 1);
+  if (aim.target && !wall && !outR) damage(aim.target, aim.target.kind === 'tank' ? 0.6 : 1);
 }
 
 // 抓起扔出：地上贴脸（2.8 米内正前方）有士兵时按右键，抓起来甩出去，砸中的人一起倒
@@ -4493,7 +4504,7 @@ function tryThrow() {
   const fx = Math.sin(S.faceYaw ?? camYaw), fz = Math.cos(S.faceYaw ?? camYaw);
   const s = soldiers.find(o => o.alive && o.role !== 'hammer' && Math.hypot(o.g.position.x - S.pos.x, o.g.position.z - S.pos.z) < 2.8 && ((o.g.position.x - S.pos.x) * fx + (o.g.position.z - S.pos.z) * fz) > 0.5);
   if (!s) return false;
-  S.yaw = S.faceYaw = Math.atan2(s.g.position.x - S.pos.x, s.g.position.z - S.pos.z);
+  S.yaw = S.faceYaw = Math.atan2(s.g.position.x - S.pos.x, s.g.position.z - S.pos.z); S.faceYawUntil = now + 1.8;
   damage(s, 5);   // 抓住就没反抗能力了（不然手里的人还在开枪）
   // Throw Object：第 40 帧弯腰抓起、63 帧抡起、78 帧甩出；1.4 倍速播（原速太慢）
   playAct('throw', { from: 40 / 30, speed: 1.4, dur: 1.7, grab: s, releaseAt: (38 / 30) / 1.4 });
@@ -4528,24 +4539,93 @@ function startUnibeam() {
   sfx.uniCharge();
 }
 
+// E 肩炮：子弹点射地面目标（士兵、坦克、无人机……）；飞机、斯塔克导弹子弹打不着，用 T
+const gunLocks = () => lockTargets().filter(t => t.kind !== 'jet' && t.kind !== 'smissile');
 function fireGuns() {
   if (S.down || S.gun.cd > 0) return;
-  Object.assign(S.gun, { cd: 3.5, until: now + 1.7, shots: 12, next: now + 0.32 });
-  const n = lockTargets().length;
+  const n = gunLocks().length;
+  Object.assign(S.gun, { cd: 3.5, until: now + 1.7, shots: n ? 12 : 0, next: now + 0.32 });
   notice(n ? `TARGETS LOCKED · ${n}` : 'NO TARGET', n ? '#ffb347' : '#8fe3ff');
+}
+// T 追踪导弹：锁坦克、F-22、斯塔克导弹，每个目标两枚、一次最多 4 枚，冷却 5 秒；肩炮弹出来打（按游戏时间排队发射，暂停时不会照样打出去）
+const MINI_CD = 5;
+function fireMinis() {
+  if (S.down || (S.mcd || 0) > now) return;
+  const hard = lockTargets().filter(t => MISSILE_KIND[t.kind]);
+  if (!hard.length) { notice('NO TARGET · MISSILES LOCK TANKS, JETS, STARK MISSILES', '#8fe3ff', 2000); return; }
+  S.mcd = now + MINI_CD;
+  S.gun.until = Math.max(S.gun.until || 0, now + 1.4);   // 肩炮弹出来
+  hard.slice(0, 2).forEach((t, i) => { for (let k = 0; k < 2; k++) miniQ.push({ t, side: (i * 2 + k) % 2 ? 'L' : 'R', at: now + 0.35 + (i * 2 + k) * 0.16 }); });
+  notice(`MISSILES ${Math.min(4, hard.length * 2)} · TARGETS LOCKED · ${Math.min(2, hard.length)}`, '#ffb347');
+}
+// ---- 肩炮追踪小导弹：打飞机、坦克、斯塔克导弹。速度按目标算：F-22 飞 320~650 米/秒、斯塔克导弹 110 米/秒，
+// 所以小导弹出膛 60 米/秒、每秒加速 600、1.4 秒到 900 米/秒（约 2.6 马赫，比最快的 F-22 快 250 米/秒，追尾也追得上但要几秒）；
+// 瞄目标前方的提前量（按目标速度 × 剩余飞行时间），每秒最多转 6 弧度；一帧飞 30 米，所以按这一帧飞过的线段算离目标最近距离，6 米内引爆。
+// 伤害：坦克 3（两枚一辆）、F-22 4（两枚一架）、斯塔克导弹 3（一枚就拦下）；5 秒没打中自己炸 ----
+const MISSILE_KIND = { tank: 3, jet: 4, smissile: 3 };
+const MINI_V0 = 60, MINI_ACC = 600, MINI_MAX = 900, MINI_TURN = 8, MINI_FUSE = 9;   // 近炸 9 米（真的空空导弹近炸引信也是十米上下）
+var minis = minis || [], miniQ = miniQ || [];
+const miniGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.7, 8).rotateX(Math.PI / 2), miniMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, metalness: 0.6, roughness: 0.4 });
+function launchMini(t, side) {
+  if (!t.alive || S.down) return;
+  const p = suit.emit['emit_gun_' + side].getWorldPosition(new V3());
+  const m = new THREE.Mesh(miniGeo, miniMat); m.position.copy(p); m.raycast = () => {}; scene.add(m);
+  const v = camera.getWorldDirection(new V3()).add(new V3(0, 0.35, 0)).normalize().multiplyScalar(MINI_V0);
+  minis.push({ m, v, t, t0: now });
+  sfx.cannon?.(p); flash(p, COL.fire, 200);
+}
+const _mtv = new V3(), _mlead = new V3(), _mseg = new V3();
+function updateMinis(dt) {
+  for (let i = miniQ.length - 1; i >= 0; i--) if (now >= miniQ[i].at) { launchMini(miniQ[i].t, miniQ[i].side); miniQ.splice(i, 1); }
+  for (let i = minis.length - 1; i >= 0; i--) {
+    const M = minis[i], p = M.m.position, T = M.t;
+    const tp = T.alive ? (T.kind === 'smissile' || T.kind === 'jet' ? T.g.position : T.lockP || _a.copy(T.g.position).setY(T.g.position.y + (T.aimY ?? 1))) : null;
+    const sp = Math.min(MINI_MAX, M.v.length() + MINI_ACC * dt);
+    if (tp) {
+      // 提前量：目标速度 × 飞到那儿要的时间（最多 2 秒）
+      const tv = T.vel || (T.kind === 'tank' ? _mtv.set(Math.sin(T.g.rotation.y), 0, Math.cos(T.g.rotation.y)).multiplyScalar(T.speed || 0) : _mtv.set(0, 0, 0));
+      const tgo = Math.min(2, p.distanceTo(tp) / Math.max(sp, 1));
+      const lead = _mlead.copy(tp).addScaledVector(tv, tgo);
+      const want = _b.copy(lead).sub(p).normalize(), dir = _d.copy(M.v).normalize(), ang = dir.angleTo(want);
+      if (ang > 1e-4) dir.lerp(want, Math.min(1, MINI_TURN * dt / ang)).normalize();
+      M.v.copy(dir).multiplyScalar(sp);
+    } else M.v.setLength(sp);
+    const step = _e3.copy(M.v).multiplyScalar(dt);
+    // 这一帧飞过的线段上离目标最近的点（飞得快，一帧 30 米，只看端点会直接穿过去）
+    let hitTarget = false;
+    // 按导弹和目标的相对运动算（迎面对飞相对速度 1400 米/秒，一帧近 50 米，只算导弹自己那段会和飞机擦身而过）
+    if (tp) {
+      const tv = T.vel || _mtv.set(0, 0, 0), rel = _mlead.copy(M.v).sub(tv).multiplyScalar(dt), L = rel.length();
+      const u = clamp(_mseg.copy(tp).sub(p).dot(rel) / (L * L || 1), 0, 1);
+      hitTarget = _mseg.copy(p).addScaledVector(rel, u).distanceTo(tp) < MINI_FUSE;
+    }
+    let wall = !hitTarget && clipShot(p, _p.copy(p).add(step), T);
+    if (wall && tp && wall.distanceTo(tp) < 15) { hitTarget = true; wall = null; }   // 撞上的是目标自己的机身/车身（不是别的墙）
+    p.add(step);
+    M.m.quaternion.setFromUnitVectors(_e2.set(0, 0, 1), _d.copy(M.v).normalize());
+    // 尾焰 + 白烟
+    emit(p, _v.copy(M.v).multiplyScalar(-0.05), 0.12, 0.35, 1);
+    if (rnd() < 0.8) emitSmoke(p, _v.set((rnd() - 0.5) * 0.4, 0.3, (rnd() - 0.5) * 0.4), 1.6 + rnd(), 0.9);
+    if (hitTarget || wall || now - M.t0 > 5 || p.y < terrainH(p.x, p.z)) {
+      explosion(p.clone(), hitTarget ? 1.2 : 0.7); flash(p, COL.fire, 3000); sfx.boom(p, 0.6);
+      if (hitTarget) damage(T, MISSILE_KIND[T.kind] || 2);
+      scene.remove(M.m); minis.splice(i, 1);
+    }
+  }
 }
 
 // 肩炮自动锁定：前方 140 米内最近的几个目标（坦克、无人机）
 // F-22：700 米内、在准星前方 25° 以内才锁得上（迎面冲过来的那一下是机会）
-function jetLockable(j) {
+function jetLockable(j, R = 700) {
   const v = _jl.copy(j.g.position).sub(camera.position), d = v.length();
-  return d < (j.kind === 'smissile' ? 1000 : 700) && v.divideScalar(d).dot(camera.getWorldDirection(_jl2)) > 0.9;
+  return d < R && v.divideScalar(d).dot(camera.getWorldDirection(_jl2)) > 0.82;
 }
 const _jl = new V3(), _jl2 = new V3();
 function lockTargets() {
   const fwd = _d.set(Math.sin(camYaw), 0, Math.cos(camYaw));
+  // 肩炮：F-22（700 米）、斯塔克导弹（600 米）要在准星前方约 35° 才锁得上，坦克 300 米——这三种打追踪导弹，别的打子弹
   return enemies()
-    .filter(t => t.alive && t.kind !== 'pilot' && ((t.kind !== 'jet' && t.kind !== 'smissile') || jetLockable(t)) && !(t.kind === 'relay' && !(t.reveal > 0)) && (t.kind === 'jet' || t.kind === 'smissile' || t.g.position.distanceTo(S.pos) < 140 && _a.copy(t.g.position).sub(S.pos).setY(0).normalize().dot(fwd) > 0.3))   // 没显形的供能塔不自动锁定（不然肩炮一锁就暴露了）
+    .filter(t => t.alive && t.kind !== 'pilot' && (t.kind !== 'smissile' || jetLockable(t, 600)) && (t.kind !== 'jet' || jetLockable(t)) && !(t.kind === 'relay' && !(t.reveal > 0)) && (t.kind === 'jet' || t.kind === 'smissile' || t.g.position.distanceTo(S.pos) < (t.kind === 'tank' ? 300 : 140) && _a.copy(t.g.position).sub(S.pos).setY(0).normalize().dot(fwd) > 0.3))   // 没显形的供能塔不自动锁定（不然肩炮一锁就暴露了）
     .sort((a, b) => a.g.position.distanceTo(S.pos) - b.g.position.distanceTo(S.pos))
     .filter(t => t.kind === 'jet' || t.kind === 'smissile' || !clipShot(_lockEye.copy(S.pos).setY(S.pos.y + 1.5), t.lockP ? _lockTo.copy(t.lockP) : _lockTo.copy(t.g.position).setY(t.g.position.y + (t.aimY ?? 1)), t))   // 隔着墙、楼的不锁（以前会锁上，看起来像能隔墙打）
     .slice(0, 4);
@@ -4602,12 +4682,12 @@ function weapons(dt) {
     const dir = _a.set(0, 1, 0).applyQuaternion(suit.emit.emit_reactor.getWorldQuaternion(_q));
     _b.copy(aim.point).sub(reactor).normalize();
     if (dir.dot(_b) > Math.cos(1.3)) dir.copy(_b);
-    uniRay.set(reactor, dir);
+    uniRay.set(reactor, dir); uniRay.far = UNI_RANGE;   // 射程 1000 米：胸口光束是远距离拦斯塔克导弹的主力（掌心炮 250、激光 100）
     const list = [...rayMeshes];
     for (const t of enemies()) if (t.alive) list.push(t.rayG || t.g);
     for (const t of civTargets || []) if (t.alive && t.g.visible) list.push(t.g);
     const hit = uniRay.intersectObjects(list, true)[0];
-    const to = hit ? hit.point : reactor.clone().addScaledVector(dir, 300);
+    const to = hit ? hit.point : reactor.clone().addScaledVector(dir, UNI_RANGE);
     let hitTarget = null;
     for (let o = hit?.object; o; o = o.parent) if (o.userData.target) { hitTarget = o.userData.target; break; }
     _d.copy(to).sub(reactor);
@@ -4649,8 +4729,20 @@ function weapons(dt) {
     Z.t += dt;
     playerNoise();
     const from = suit.emit.emit_missile.getWorldPosition(new V3());
-    const wall = clipShot(from, aim.point, aim.target);
-    const to = wall ?? aim.point;
+    // 激光自动追飞机：准星前方 30° 以内、500 米内有 F-22，激光自己咬住它跟着走（飞机太快，手动瞄不上；肩炮不再锁飞机）
+    const camF = camera.getWorldDirection(_b);
+    let jet = null, jd = Infinity;
+    for (const j of jets) {
+      if (!j.alive || j.state === 'off') continue;
+      const dd = j.g.position.distanceTo(from);
+      if (dd < LASER_JET_R && dd < jd && _p.copy(j.g.position).sub(camera.position).normalize().dot(camF) > Math.cos(0.52)) { jet = j; jd = dd; }
+    }
+    const aimPt = jet ? jet.g.position : aim.point, aimTg = jet || aim.target;
+    const wall = clipShot(from, aimPt, aimTg);
+    let to = wall ?? aimPt;
+    // 射程 100 米（《钢铁侠 2》世博会上切汉默无人机都是身边几十米内）：再远激光在半空散掉，没伤害
+    const outL = !jet && from.distanceTo(to) > LASER_RANGE;
+    if (outL) to = _p.copy(to).sub(from).setLength(LASER_RANGE).add(from);
     _d.copy(to).sub(from);
     const len = _d.length();
     laserBeam.position.copy(from).addScaledVector(_d, 0.5);
@@ -4661,9 +4753,10 @@ function weapons(dt) {
     for (let i = 0; i < 3; i++) emit(to, randDir(_v).multiplyScalar(5 + rnd() * 7).add(_b.set(0, 2, 0)), 0.5 + rnd() * 0.4, 0.06, 2);
     emit(to, randDir(_v).multiplyScalar(0.6), 0.25, 0.35, 1);
     flash(to, LASER_COL, 14);
-    if (aim.target && !wall) damage(aim.target, 4 * dt);
+    if (outL) {}
+    else if (aimTg && !wall) damage(aimTg, 4 * dt);
     // 切在墙上、地上：留下一道烧红后变黑的切痕
-    else if ((wall || aim.normal) && now - (Z.lastMark || 0) > 0.035) {
+    else if (!jet && (wall || aim.normal) && now - (Z.lastMark || 0) > 0.035) {
       Z.lastMark = now;
       cityLife?.damage(to, 1.3, 1.0, 0);
       addMark(to, wall ? shotN : aim.normal, 0.26 + rnd() * 0.12, 1);
@@ -4673,12 +4766,13 @@ function weapons(dt) {
   laserBeam.visible = lasing;
   sfx.laser(lasing);
 
-  // 肩炮：弹出后左右交替点射锁定目标
+  updateMinis(dt);
+  // 肩炮：弹出后左右交替点射锁定目标（飞机、坦克在 fireGuns 里打导弹，子弹只打别的）
   const G = S.gun;
   G.cd = Math.max(0, G.cd - dt);
   S.gunT = clamp(S.gunT + (now < G.until ? dt : -dt) * 5, 0, 1);
   // 自动锁定的肩炮：没有可锁的目标就不打（不朝空中乱扫）
-  if (G.shots > 0 && !lockTargets().length) G.shots = 0;
+  if (G.shots > 0 && !gunLocks().length) G.shots = 0;
   if (G.shots > 0 && now >= G.next && S.gunT > 0.9) {
     G.next = now + 0.075;
     if (G.shots === 12) sfx.gun();
@@ -4686,7 +4780,7 @@ function weapons(dt) {
     G.shots--;
     const n = G.n++ % 2 ? 'L' : 'R';
     const muzzle = suit.emit['emit_gun_' + n].getWorldPosition(new V3());
-    const locks = lockTargets();
+    const locks = gunLocks();
     let tp, tk = null;
     if (locks.length) {
       tk = locks[(G.n >> 1) % locks.length];
@@ -4858,7 +4952,7 @@ const drones = Array.from({ length: MAX_DRONES }, (_, i) => {
 
 // ---- 波次：每撑过 60 秒升一波，无人机多一架（最多 12 架），所有敌人开火更快 ----
 // 无人机：第 1 波 4 架，每波多 1 架，最多 8 架；开火间隔每波缩短 7%，最多缩到 70%
-const activeDrones = () => S.radarDown ? 0 : Math.min(8, 3 + S.wave);   // 沙漠雷达站炸了：不再派新的无人机
+const activeDrones = () => !CITY || S.radarDown ? 0 : Math.min(8, 3 + S.wave);   // 沙漠不派空中增援（飞得太快、说来就来），只有从基地开过来的坦克   // 沙漠雷达站炸了：不再派新的无人机
 const waveMul = () => Math.max(0.7, Math.pow(0.93, S.wave - 1));
 // 沙漠：开局出生的村子是安全的——村子周围那 5 辆坦克、无人机先不出现；第一次拉响警报、或开打 4 分钟后才派过来，波次也从那时开始算
 // （以前一落地 8 秒就被村外开进来的坦克发现）
@@ -5177,6 +5271,17 @@ function respawnTank(t) {
   } else
   // 纽约：在离钢铁侠 150~300 米的路口出现；沙漠：在村外 170~190 米找块空地，朝村子中央开进来
   if (NAV) placeOnRoad(t, 150, 300, S.pos);
+  else if (S.liberated && reinfFrom() === false) { t.respawn = now + 60; return; }
+  else if (S.liberated) {
+    // 反攻村子：从最近的武器库基地开出来，一路开向村子（4.5 米/秒，开过来要好几分钟，半路可以拦）
+    const f = reinfFrom();
+    for (let k = 0; k < 20; k++) {
+      const a = rnd() * Math.PI * 2, r = 25 + rnd() * 15, x = f.x + Math.sin(a) * r, z = f.z + Math.cos(a) * r, yaw = Math.atan2(HOME.x - x, HOME.z - z);
+      if (tankHullBlocked(x, z, yaw, terrainH(x, z))) continue;
+      t.g.position.set(x, terrainH(x, z), z); t.g.rotation.y = yaw; break;
+    }
+    t.patrol = new V3(HOME.x + (rnd() - 0.5) * 60, 0, HOME.z + (rnd() - 0.5) * 60);
+  }
   else for (let k = 0; k < 20; k++) {
     const a = rnd() * Math.PI * 2, r = 170 + rnd() * 20;
     const x = Math.sin(a) * r, z = Math.cos(a) * r;
@@ -5218,13 +5323,33 @@ function tankHullBlocked(x, z, yaw, y) {
 // 按 want 方向转、按 speedT 往前开；会压到墙就不动（转向也不转进墙里），返回这一帧有没有被挡住
 function moveTank(t, want, speedT, turnRate, dt) {
   const p = t.g.position, h0 = t.g.rotation.y;
+  // 已经陷在房子/墙里（原地就算压墙）超过 1 秒：在周围 3~15 米找一块放得下车身的空地挪过去（藏在墙里的车谁也看不见，挪一下不穿帮）
+  if (now >= (t.inAt || 0)) {
+    t.inAt = now + 0.5;
+    if (tankHullBlocked(p.x, p.z, h0, p.y)) {
+      t.inside = (t.inside || 0) + 0.5;
+      if (t.inside >= 1) {
+        out: for (let r = 3; r <= 15; r += 3) for (let k = 0; k < 12; k++) {
+          const a = k / 12 * Math.PI * 2 + r, x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r, y = terrainH(x, z);
+          if (!tankHullBlocked(x, z, h0, y)) { p.set(x, y, z); t.inside = 0; break out; }
+        }
+      }
+    } else t.inside = 0;
+  }
   const h1 = h0 + clamp(angDiff(want, h0), -turnRate * dt, turnRate * dt);
-  if (!tankHullBlocked(p.x, p.z, h1, p.y)) t.g.rotation.y = h1;
+  // 压墙检测很费（每次十几条射线，以前每辆坦克每帧两次，占游戏逻辑三成）：每 0.15 秒查一次，查的时候往前多看 0.25 秒的路程，中间沿用结果
+  const chk = now >= (t.blkAt || 0);
+  if (chk) {
+    t.blkAt = now + 0.15;
+    const ht = h0 + clamp(angDiff(want, h0), -turnRate * 0.25, turnRate * 0.25);
+    t.turnOk = Math.abs(ht - h0) < 1e-4 || !tankHullBlocked(p.x, p.z, ht, p.y);
+  }
+  if (t.turnOk) t.g.rotation.y = h1;
   t.speed += (speedT - t.speed) * damp(1.5, dt);
   const h = t.g.rotation.y;
-  const nx = p.x + Math.sin(h) * t.speed * dt, nz = p.z + Math.cos(h) * t.speed * dt;
-  if (t.speed > 0.05 && tankHullBlocked(nx, nz, h, p.y)) { t.speed = 0; return true; }
-  p.x = nx; p.z = nz;
+  if (chk) t.fwdBlk = t.speed > 0.05 && tankHullBlocked(p.x + Math.sin(h) * (t.speed * 0.25 + 0.2), p.z + Math.cos(h) * (t.speed * 0.25 + 0.2), h, p.y);
+  if (t.speed > 0.05 && t.fwdBlk) { t.speed = 0; return true; }
+  p.x += Math.sin(h) * t.speed * dt; p.z += Math.cos(h) * t.speed * dt;
   return false;
 }
 // 纽约：沿路网开，到路口挑离钢铁侠近的方向（带点随机，不掉头）；靠近了停下来开炮
@@ -5297,7 +5422,8 @@ function driveTank(t, pc, dt) {
   }
   // 车身会压到房子就停下，下一帧换个方向转
   if (moveTank(t, want, speedT, TANK_TURN, dt)) { t.orbit *= rnd() < dt * 2 ? -1 : 1; t.stuck = (t.stuck || 0) + dt; } else t.stuck = 0;
-  if (t.stuck > 4) { t.stuck = 0; t.g.rotation.y += Math.PI * (0.5 + rnd() * 0.5); }
+  // 卡住 4 秒：换个方向（以前直接原地转 90~180°，不查会不会撞墙，车尾一甩扫进房子里，之后就永远卡在屋里）
+  if (t.stuck > 4) { t.stuck = 0; for (let k = 0; k < 8; k++) { const y = t.g.rotation.y + Math.PI * (0.5 + rnd() * 0.5) * (rnd() < 0.5 ? -1 : 1); if (!tankHullBlocked(p.x, p.z, y, p.y)) { t.g.rotation.y = y; break; } } }
   p.y = terrainH(p.x, p.z);
   // 履带扬起的沙尘
   if (rnd() < t.speed * dt * 2) emit(_e3.set(p.x - Math.sin(h) * 3 + (rnd() - 0.5) * 3, p.y + 0.3, p.z - Math.cos(h) * 3), _v.set(0, 0.5, 0), 1.5, 1.4, 4);
@@ -5350,7 +5476,17 @@ function updateTanks(dt) {
 }
 
 // ---- 无人机：从远处飞来，绕着钢铁侠盘旋射击；打下来几秒后从远处补一架 ----
+// 沙漠增援从还没炸掉的武器库基地出发（离你最近的那座），飞/开过来要好一阵——不再凭空出现在你身边；
+// 武器库全炸光了就不再有增援（炸基地的回报）
+function reinfFrom() {
+  if (CITY) return null;
+  const al = depots.filter(d => d.alive && !d.node);
+  if (!al.length) return false;
+  return al.sort((a, b) => a.g.position.distanceToSquared(S.pos) - b.g.position.distanceToSquared(S.pos))[0].g.position;
+}
 function spawnDrone(d) {
+  const from = reinfFrom();
+  if (from === false) { d.respawn = now + 30; return; }
   if (!drones.some(o => o.alive)) notice('DRONES INBOUND', '#ff5a3c');
   // 从 200 米外飞进来，到你附近 60~130 米的一个点巡逻搜索（不再直接知道你在哪）
   const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 200, z = S.pos.z + Math.cos(a) * 200;
@@ -5364,6 +5500,7 @@ function spawnDrone(d) {
     d.home = new V3(n.x, n.y + 20, n.z);
     d.g.position.set(n.x + Math.sin(a) * 120, n.y + 45, n.z + Math.cos(a) * 120);
   }
+  if (from) d.g.position.set(from.x + (rnd() - 0.5) * 20, terrainH(from.x, from.z) + 30, from.z + (rnd() - 0.5) * 20);
   d.vel.set(0, 0, 0);
   Object.assign(d, { hp: DRONE_HP, alive: true, reload: 3 + rnd() * 3, aw: 0 });
   d.g.visible = true;
@@ -5890,6 +6027,7 @@ function spawnBoss() {
       a = rnd() * Math.PI * 2; x = site.p.x + Math.sin(a) * 20; z = site.p.z + Math.cos(a) * 20;
       boss.site = { ...site, x: site.p.x, z: site.p.z };
       const km = (Math.hypot(x - S.pos.x, z - S.pos.z) / 1000).toFixed(1);
+      ping({ x, z }, '#ff2a1a', 60);
       notice(`IRON MONGER ATTACKING ${site.name} · ${km} km · ${clockOf(x, z)}`, '#ff3b2a', 6000);
     } else boss.site = null;
   }
@@ -5985,7 +6123,7 @@ function updateBoss(dt) {
       B.smashCd = 5 + rnd() * 3;
       setBossState('stomp');
       blastHouses(p, 10, 3);
-      if (S0.village) { S.stats.villageHits = (S.stats.villageHits || 0) + 1; notice(`IRON MONGER IS DESTROYING THE VILLAGE · ${clockOf(p.x, p.z)}`, '#ff3b2a', 2500); }
+      if (S0.village) { ping(p, '#ff2a1a', 12); S.stats.villageHits = (S.stats.villageHits || 0) + 1; notice(`IRON MONGER IS DESTROYING THE VILLAGE · ${clockOf(p.x, p.z)}`, '#ff3b2a', 2500); }
     }
     if (B.state === 'walk') {
       const fw = _d.set(Math.sin(B.g.rotation.y), 0, Math.cos(B.g.rotation.y));
@@ -6185,7 +6323,7 @@ function buildOutpost(o, seed) {
       else {
         const tx = Math.cos(a), tz = -Math.sin(a);
         // 每一格一个碰撞盒，和模型同一个朝向（以前一段一个长盒子，长边转错了 90°，墙能穿过去）
-        for (const yy of [0, 1.42]) for (let i = 0; i < 3; i++) { const u = (i - 1) * 1.6; containerSpots.push({ x: o.x + x + tx * u, z: o.z + z + tz * u, y: o.y + yy, ry: ry + (R() - 0.5) * 0.04, kind: 4, w: 1.6, h: 1.42, len: 1.1 }); }
+        for (const yy of [0, 1.42]) for (let i = 0; i < 3; i++) { const u = (i - 1) * 1.6; containerSpots.push({ x: o.x + x + tx * u, z: o.z + z + tz * u, y: o.y + yy, ry: ry + (R() - 0.5) * 0.04, kind: 4, w: 1.6, h: 1.42, len: 1.6 }); }
       }
       n++;
     }
@@ -6259,7 +6397,7 @@ function buildPOIs() {
     p.ry = ry;
     const fx = Math.sin(ry), fz = Math.cos(ry), sx = Math.cos(ry), sz = -Math.sin(ry);
     const at = (f, s) => ({ x: p.x + fx * f + sx * s, z: p.z + fz * f + sz * s });
-    const hesco = (f, s, n, dir = 1) => { for (let i = 0; i < n; i++) { const q = at(f, s + i * 1.6 * dir); containerSpots.push({ ...q, y: p.y, ry: ry + Math.PI / 2 + (R() - 0.5) * 0.05, kind: 4, w: 1.6, h: 1.42, len: 1.1 }); } };
+    const hesco = (f, s, n, dir = 1) => { for (let i = 0; i < n; i++) { const q = at(f, s + i * 1.6 * dir); containerSpots.push({ ...q, y: p.y, ry: ry + Math.PI / 2 + (R() - 0.5) * 0.05, kind: 4, w: 1.6, h: 1.42, len: 1.6 }); } };
     if (p.kind === 'checkpoint') {
       // 路障：两排防爆墙左右错开（车得 S 形绕过去）+ 哨塔 + 一个集装箱当岗亭 + 一顶帐篷
       hesco(-7, -9, 6); hesco(7, 9, 6, -1); hesco(-7, 6, 3); hesco(7, -6, 3, -1);
@@ -6649,6 +6787,20 @@ function breakCamp(c, msg) {
 const _cpQ = new THREE.Quaternion(), _cpE = new THREE.Euler();
 function captiveLife(s, pc, dt) {
   const B = s.bones, d = s.g.position.distanceTo(pc);
+  // 下面是在动作姿势上「再转一点」。Three 的动画混合器在姿势不变时（投降动作播完停在最后一帧）不会重写骨头，
+  // 转动就一帧帧累加——头转成 360°。所以记住上一帧叠加前/后的姿势：骨头还是上一帧叠加后的样子（动作没改过它），先还原再叠加
+  const CAP = ['Spine2', 'LeftShoulder', 'RightShoulder', 'Head', 'Neck'];
+  s.capBase ||= {}; s.capLeft ||= {};
+  for (const k of CAP) {
+    const b = B[k]; if (!b) continue;
+    if (s.capLeft[k] && b.quaternion.equals(s.capLeft[k])) b.quaternion.copy(s.capBase[k]);
+    (s.capBase[k] ||= new THREE.Quaternion()).copy(b.quaternion);
+  }
+  captivePose(s, pc, dt, d);
+  for (const k of CAP) if (B[k]) (s.capLeft[k] ||= new THREE.Quaternion()).copy(B[k].quaternion);
+}
+function captivePose(s, pc, dt, d) {
+  const B = s.bones;
   if (d < 12 || now < (s.panic || 0)) s.flinch = Math.min(1, (s.flinch || 0) + dt * 6);
   else s.flinch = Math.max(0, (s.flinch || 0) - dt * 0.8);
   const f = ease(s.flinch), fear = 0.5 + 0.5 * clamp(1 - d / 40, 0, 1);   // 你越近越怕：抖得越厉害、喘得越快
@@ -7186,7 +7338,7 @@ function updateVillageRaid(dt) {
   blastHouses(hp, 2, 2);
   if (!h.alive) { S.stats.villageHits = (S.stats.villageHits || 0) + 1; }
   for (const H of hostages) if (H.state === 'home' && H.g.position.distanceTo(hp) < 6) { H.state = 'dead'; H.deadAt = now; hostageTo(H, 'die'); S.stats.civilians = (S.stats.civilians || 0) + 1; notice(`VILLAGER KILLED IN SHELLING · ${S.stats.civilians}`, '#ff5a3c'); }
-  if (now - (S.raidNote || -99) > 15) { S.raidNote = now; notice(`VILLAGE UNDER ATTACK · ${(Math.hypot(HOME.x - S.pos.x, HOME.z - S.pos.z) / 1000).toFixed(1)} km · ${clockOf(HOME.x, HOME.z)}`, '#ff3b2a', 3500); }
+  if (now - (S.raidNote || -99) > 15) { S.raidNote = now; ping(HOME, '#ff2a1a', 20); notice(`VILLAGE UNDER ATTACK · ${(Math.hypot(HOME.x - S.pos.x, HOME.z - S.pos.z) / 1000).toFixed(1)} km · ${clockOf(HOME.x, HOME.z)}`, '#ff3b2a', 3500); }
 }
 function oilBlast(t) {
   if (t.dead) return; t.dead = true; t.alive = false;
@@ -7207,7 +7359,7 @@ function updatePOIs(dt) {
   if (homePad) {
     const ok = now > homePad.cd, pulse = 0.7 + 0.3 * Math.sin(now * 3);
     if (!S.liberated) homePad.ringMat.color.setRGB(2.6 * pulse, 0.18 * pulse, 0.1 * pulse); else   // 村子还被占着：红光（锁定），解放后变蓝
-    homePad.ringMat.color.setRGB(ok ? 0.4 * pulse : 0.3, ok ? 2.2 * pulse : 0.3, ok ? 3 * pulse : 0.35);
+    { const br = 0.35 + 0.15 * Math.sin(now * 1.5); homePad.ringMat.color.setRGB(ok ? 0.4 * pulse : 0.15 * br * 2, ok ? 2.2 * pulse : 0.8 * br * 2, ok ? 3 * pulse : 1.1 * br * 2); }   // 冷却中（刚补过）：暗蓝慢呼吸（以前变成灰白，像坏了）
     if (ok && S.liberated && !S.flying && !S.down && Math.hypot(S.pos.x - homePad.p.x, S.pos.z - homePad.p.z) < 5.5 && (S.armor < 100 || S.shield < 100)) { S.armor = 100; S.shield = 100; homePad.cd = now + 45; sfx.powerUp?.(); notice('REPAIR PAD · ARMOR & SHIELD RESTORED', '#7dffb0', 2500); }
   }
   updateVillageRaid(dt);
@@ -7327,6 +7479,7 @@ function updateHostageHud() {
     return;
   }
   const left = Math.max(0, best.execAt - now), km = (Math.hypot(best.o.x - S.pos.x, best.o.z - S.pos.z) / 1000).toFixed(1);
+  ping(best.o, '#ff8a2a', 1);
   el.textContent = zh(`HOSTAGES · EXECUTION IN ${Math.ceil(left)}s · ${km} km · ${clockOf(best.o.x, best.o.z)} · LOST ${S.stats.hostagesLost || 0}/${HOSTAGE_FAIL || 5}`);
   el.style.display = 'block';
   el.style.color = left < 5 && (now * 3) % 1 < 0.5 ? '#ff3b2a' : '#ffb347';
@@ -7373,7 +7526,10 @@ function updateHostages(dt) {
       h.g.rotation.y = lerpAngle(h.g.rotation.y, a, damp(4, dt));
       p.x += Math.sin(h.g.rotation.y) * 4.5 * dt; p.z += Math.cos(h.g.rotation.y) * 4.5 * dt; p.y = terrainH(p.x, p.z);
       // 跑 8 秒后（跑远了看不见）直接到村子里：在村子中央附近慢慢转悠——救回来的人越多村子越热闹
-      if (now - h.freedAt > 8 && !S.liberated) { h.state = 'gone'; h.g.visible = false; }   // 村子还被占着：跑远就算了
+      if (!S.liberated) {
+        // 村子还被占着：一直往村子方向跑，跑到离你 150 米外、又不在镜头里才消失（以前跑 8 秒就当着你的面凭空不见）
+        if (now - h.freedAt > 8 && p.distanceTo(S.pos) > 150 && !inView(p)) { h.state = 'gone'; h.g.visible = false; }
+      }
       else if (now - h.freedAt > 8) {
         h.state = 'home'; h.ang = rnd() * Math.PI * 2; h.r = 12 + rnd() * 18;
         hostageTo(h, h.act.walk ? 'walk' : 'run');
@@ -7648,7 +7804,7 @@ function updateSoldiers(dt) {
       if (show) { s.mixer.update(dt); s.g.updateMatrixWorld(true); }
       updatePack(s);
       // 单个人死了 90 秒后补；营地崩溃过的不单独补，等整个营地重置
-      if (now > s.respawn && !calm() && S.pos.distanceTo(s.home) > 260 && !s.camp?.broken) resetSoldier(s);
+      if (now > s.respawn && !calm() && S.pos.distanceTo(s.home) > 260 && !s.camp?.broken && !s.camp?.village) resetSoldier(s);   // 古尔米拉的兵不补（以前飞远再回来又满了，像打不完）
       continue;
     }
     if (s.team === 'police') { updatePolice(s, dt, show); continue; }
@@ -8153,6 +8309,15 @@ function addLockdown(d) {
   d.wallBaseY = walls.position.y; walls.position.y -= 5.8;
   walls.traverse(o => { if (o.isMesh) o.raycast = () => {}; });
   scene.add(walls);
+  // 钢板的碰撞盒：跟着钢板升降（埋在地下时也在地下，不挡）；以前没碰撞，人直接穿过钢板进仓库，在里面怎么打都打不动
+  {
+    const box = new THREE.Mesh(new THREE.BoxGeometry(9.2, 5.6, 1.2).translate(0, 2.8, 0), new THREE.MeshBasicMaterial({ visible: false }));
+    walls.add(box); walls.updateMatrixWorld(true);
+    const ws = box.geometry.boundingSphere || (box.geometry.computeBoundingSphere(), box.geometry.boundingSphere);
+    box.userData.ws = ws.clone().applyMatrix4(box.matrixWorld); box.userData.ws.center.y += 5.8;   // 按升起来的位置算包围球
+    box.userData.target = { kind: 'prop', alive: true, hp: 1 };
+    camBlockers.push(box); rayMeshes.push(box);
+  }
   d.walls = walls; d.wallK = 0; d.lockdown = false;
   // 发电机：柴油机箱 + 排气管 + 指示灯 + 一根电缆拖向武器库
   d.gens = [];
@@ -8319,6 +8484,7 @@ function addDepotInterior(d) {
     sh.raycast = () => {}; sh.renderOrder = 2; sh.name = 'hangar_shield';
     inner.add(sh); inner.updateMatrixWorld(true); d.g.attach(sh);   // 挂到武器库上（仓库里的东西远了不画，护罩远处也要看得见）
     d.hutShield = sh;
+    d.shieldGeo = { RW, RH, A0, A1, longX, back: -doorSign, eWall: Math.min(((RW - 0.8) / RW) ** 2, ((RH - 0.8) / RH) ** 2) };   // eWall：仓库墙在这个椭圆里的位置，比它小就是在仓库里面
   }
   // 仓库外壳：打了没用；大门是单独的目标
   const hut = { kind: 'hut', alive: true, depot: d, hp: 1 };
@@ -8331,6 +8497,49 @@ function addDepotInterior(d) {
   d.doorOut = inner.localToWorld(P(doorSign * (len / 2 + 1), 0, 0)).sub(inner.localToWorld(P(doorSign * len / 2, 0, 0))).normalize();   // 门朝外的方向
   // 发射车也挂在武器库下面：打车身别算到武器库头上
   d.g.traverse(o => { if (o.name === 'launcher_tank') o.userData.target = { kind: 'prop', alive: true, hp: 1 }; });
+}
+// 仓库能量护罩是实心的：罩子和仓库墙之间那一圈、后墙外那一截都进不去，往外推出去（以前只是画出来，人直接穿过去）；
+// 从敞开的大门那头进仓库不挡；武器库炸了护罩没了就不挡
+const _shL = new V3();
+// 人在不在这座仓库里面（钢板升起前就进去了）：在里面打，封锁钢板挡不住
+function inHangar(d) {
+  const G = d.shieldGeo; if (!G || !d.inner) return false;
+  const L = d.inner.worldToLocal(_shL.copy(S.pos).setY(S.pos.y + 0.9)), a = G.longX ? L.x : L.z, sd = G.longX ? L.z : L.x;
+  return Math.abs(a) < G.A1 && (sd / G.RW) ** 2 + (Math.max(0, L.y) / G.RH) ** 2 < G.eWall;
+}
+function shieldPush(pos) {
+  for (const d of depots) {
+    const G = d.shieldGeo; if (!G || !d.alive || !d.inner) continue;
+    if (Math.abs(pos.x - d.g.position.x) > 40 || Math.abs(pos.z - d.g.position.z) > 40) continue;
+    const L = d.inner.worldToLocal(_shL.copy(pos).setY(pos.y + 0.9));
+    let a = G.longX ? L.x : L.z, sd = G.longX ? L.z : L.x;
+    const h = Math.max(0, L.y), e = (sd / G.RW) ** 2 + (h / G.RH) ** 2;
+    if (e >= 1) continue;
+    const inBack = a * G.back > G.A1 - 0.5 && a * G.back < G.A1 + 0.6;
+    if (a > G.A1 + 0.6 || a < G.A0 - 0.6) continue;
+    if (inBack) a = G.back * (G.A1 + 0.6);                  // 后墙外：往后推出去
+    else if (e > G.eWall) { const k = 1 / Math.sqrt(e) * 1.01; sd *= k; L.y = h * k; }   // 拱顶那一圈：沿径向推到罩子外面
+    else continue;                                          // 已经在仓库里面（从大门进来的）
+    if (G.longX) { L.x = a; L.z = sd; } else { L.z = a; L.x = sd; }
+    d.inner.localToWorld(L);
+    pos.x = L.x; pos.z = L.z; if (L.y - 0.9 > pos.y) pos.y = L.y - 0.9;
+  }
+}
+// 罩面高度：(x, z) 在哪座护罩正上方、人又在罩子外面（不是从大门进到仓库里）时，返回罩面的世界高度
+const _shT = new V3();
+function shieldTopAt(x, z, y) {
+  for (const d of depots) {
+    const G = d.shieldGeo; if (!G || !d.alive || !d.inner) continue;
+    if (Math.abs(x - d.g.position.x) > 30 || Math.abs(z - d.g.position.z) > 30) continue;
+    const L = d.inner.worldToLocal(_shT.set(x, y, z));
+    const a = G.longX ? L.x : L.z, sd = G.longX ? L.z : L.x;
+    if (Math.abs(a) > G.A1 + 0.6 || Math.abs(sd) >= G.RW) continue;
+    const h = G.RH * Math.sqrt(1 - (sd / G.RW) ** 2);
+    if (L.y < h * Math.sqrt(G.eWall) - 0.3) continue;   // 人在罩子里面（仓库里）：不算
+    if (G.longX) _shT.set(L.x, h, L.z); else _shT.set(L.x, h, L.z);
+    return d.inner.localToWorld(_shT).y;
+  }
+  return null;
 }
 function blowDoor(dr) {
   dr.alive = false;
@@ -8350,6 +8559,17 @@ function addLauncher(d) {
   truck.castShadow = truck.receiveShadow = true;
   d.g.add(truck);
   d.g.updateMatrixWorld(true);
+  // 车身碰撞：按车自己的朝向量一个盒子挂在车上（以前没碰撞，人和镜头直接穿进车里）
+  {
+    const inv = truck.matrixWorld.clone().invert(), bb = new THREE.Box3(), tb = new THREE.Box3(), _m4a = new THREE.Matrix4();
+    truck.traverse(o => { if (o.isMesh) { o.geometry.computeBoundingBox(); bb.union(tb.copy(o.geometry.boundingBox).applyMatrix4(_m4a.multiplyMatrices(inv, o.matrixWorld))); } });
+    const sz = bb.getSize(new V3()), c = bb.getCenter(new V3());
+    const box = new THREE.Mesh(new THREE.BoxGeometry(sz.x, sz.y * 0.75, sz.z), new THREE.MeshBasicMaterial({ visible: false }));
+    box.position.set(c.x, bb.min.y + sz.y * 0.375, c.z); truck.add(box); box.updateMatrixWorld(true);
+    box.geometry.computeBoundingSphere(); box.userData.ws = box.geometry.boundingSphere.clone().applyMatrix4(box.matrixWorld);
+    box.userData.target = { kind: 'prop', alive: true, hp: 1 };
+    camBlockers.push(box); rayMeshes.push(box);
+  }
   const m = mSrc.clone();
   m.traverse(o => { if (o.isMesh) { o.castShadow = true; o.raycast = () => {}; o.material = starkMissileMat(mSrc.userData.length || 13.2); } });
   const flame = new THREE.Mesh(new THREE.ConeGeometry(0.55, 4, 10).rotateX(Math.PI), uniMat(new THREE.Color(6, 3, 1))); flame.position.y = -2.2; flame.visible = false; m.add(flame);
@@ -8445,11 +8665,13 @@ function addLauncherSimple(d) {
 }
 var starkMissiles = starkMissiles || [];
 const SM_SPEED = 110, SM_FUSE = 20;
+var KNOCK_T = 3;   // 被打下来后推进器失灵多久（秒），之后离地 12 米以上就在空中重启（以前 1.3 秒太短）
 // 发射倒计时：只有你动手打这座武器库（打外壳、大门、里面）才开始，20 秒后从它的发射车上发射
 // （以前拉警报、敌人呼叫支援也会让别的营地发射，玩家根本不知道导弹从哪来）
 function armStark(d) {
   if (CITY || !d || !d.alive || !d.missile || d.missile.alive || d.missile.spent || d.launchAt > now) return;
   d.launchAt = now + SM_FUSE;
+  ping(d.g.position, '#ff8a2a', SM_FUSE);
 }
 function launchStark(sm) {
   sm.alive = true; sm.hp = 3; sm.t = 0;
@@ -8462,6 +8684,7 @@ function launchStark(sm) {
   for (let k = 0; k < 60; k++) emitSmoke(_a.set(p.x + (rnd() - 0.5) * 8, p.y + rnd() * 4, p.z + (rnd() - 0.5) * 8), _v.set((rnd() - 0.5) * 6, 2 + rnd() * 4, (rnd() - 0.5) * 6), 10 + rnd() * 6, 6 + rnd() * 5);
   sfx.cannon(p); sfx.boom(p, 0.7);
   // 告诉你从哪发的：几点钟方向（按镜头朝向）、多远
+  ping(p, '#ff2a1a', 25);
   notice(`STARK MISSILE LAUNCHED · ${clockOf(p.x, p.z)} · ~${Math.round(Math.hypot(p.x - S.pos.x, p.z - S.pos.z))} m · INTERCEPT IT`, '#ff3b2a', 4000);
 }
 function killStark(sm, shot) {
@@ -8487,6 +8710,7 @@ function killStark(sm, shot) {
   flash(p.clone().setY(p.y + 20), COL.fire, 60000);
   S.shake = Math.max(S.shake, clamp(1.2 - dP / 600, 0.3, 1));
   megaBooms.push({ p, t0: now });
+  ping(p, '#ff2a1a', 20);
   scorch(p, 42);
   notice('VILLAGE HIT · CIVILIAN CASUALTIES', '#ff3b2a', 3500);
 }
@@ -8828,6 +9052,10 @@ function updateIntel() {
   if (S.intelQ?.length && !S.intelQ[0].note && now >= S.intelQ[0].at) { const q = S.intelQ.shift(); revealIntel(q.src, q.cave); }
   if (!S.liberated && villageCamp) {
     const clear = villageCamp.members.every(o => !o.alive || o.surrender || o.flee) && tanks.filter(o => !o.guard && !o.route).every(o => !o.alive) && extremis.filter(e => e.camp === villageCamp).every(e => !e.alive);   // 分到村子的绝境战士也要打掉
+    const left = [...villageCamp.members.filter(o => o.alive && !o.surrender && !o.flee), ...tanks.filter(o => !o.guard && !o.route && o.alive), ...extremis.filter(e => e.camp === villageCamp && e.alive)];
+    if (S.libLeft !== undefined && left.length < S.libLeft && left.length) notice(`GULMIRA · ${left.length} LEFT`, '#e8c46a', 2000);
+    S.libLeft = left.length;
+    if (left.length && left.length <= 4) for (const o of left) ping(o.g.position, '#e8c46a', 0.6);   // 最后几个：小地图上标出来，不用满村子找
     if (clear) { S.liberated = true; S.libAt = now; S.victoryAt = now + 1; notice('GULMIRA LIBERATED · REPAIR PAD ONLINE · THE VILLAGE IS YOUR BASE NOW', '#7dffb0', 5000); }
     return;
   }
@@ -8848,6 +9076,7 @@ function updateIntel() {
     // 方位按钟点报（飞行员习惯，12 点 = 镜头正前方），不在地图上标点
     const f = camera.getWorldDirection(_e1), rel = Math.atan2(dx, dz) - Math.atan2(f.x, f.z);
     const clock = ((Math.round(-rel / (Math.PI / 6)) % 12) + 12) % 12 || 12;
+    ping(c.o, '#ff2a1a', 60);
     notice(`OASIS VILLAGE UNDER ATTACK · VILLAGERS TAKEN HOSTAGE · ${km} km · ${clock} O'CLOCK`, '#ff3b2a', 6000);
   }
   // 袭击中：村子冒黑烟，远远就能看到
@@ -8923,8 +9152,27 @@ function driveConvoy(t, pc, dt) {
   if (Math.hypot(tgt.x - p.x, tgt.z - p.z) < 6) R.i = (R.i + R.cv.dir + R.pts.length) % R.pts.length;
   const want = Math.atan2(R.pts[R.i].x - p.x, R.pts[R.i].z - p.z);
   let speedT = 7 * clamp(1.2 - Math.abs(angDiff(want, t.g.rotation.y)), 0.2, 1);
-  // 整队交战：队里任何一辆看见你，全队停下
-  if (R.cv.members.some(o => o.alive && o.los)) speedT = 0;
+  // 整队交战：队里任何一辆看见你，全队冲下公路往两边散开（一辆往左、一辆往右、一辆往前斜插，各 15~25 米），散开了再停下打
+  // （以前全队原地停下，一字排开当靶子，残骸也整整齐齐一排）；看不见你 20 秒后回到公路继续走
+  const cv = R.cv;
+  if (cv.members.some(o => o.alive && o.los)) cv.contact = now;
+  if (cv.contact && now - cv.contact < 20) {
+    if (!t.scatter) {
+      const k = cv.members.indexOf(t), side = k % 3 === 0 ? -1 : k % 3 === 1 ? 1 : (rnd() < 0.5 ? -1 : 1), hh = t.g.rotation.y, d = 15 + rnd() * 10, fw = k % 3 === 2 ? 12 + rnd() * 8 : (rnd() - 0.3) * 8;
+      t.scatter = new V3(p.x + Math.cos(hh) * side * d + Math.sin(hh) * fw, 0, p.z - Math.sin(hh) * side * d + Math.cos(hh) * fw);
+    }
+    const sd = Math.hypot(t.scatter.x - p.x, t.scatter.z - p.z);
+    if (sd > 3) {
+      if (moveTank(t, Math.atan2(t.scatter.x - p.x, t.scatter.z - p.z), 6, TANK_TURN * 1.5, dt)) t.scatter.set(p.x, 0, p.z);   // 撞到东西：就地停
+    } else moveTank(t, t.g.rotation.y, 0, TANK_TURN, dt);
+    p.y = terrainH(p.x, p.z);
+    return;
+  }
+  if (t.scatter) {
+    // 回公路：找环线上最近的点接着走
+    t.scatter = null;
+    let bi = R.i, bd = Infinity; R.pts.forEach((q, i) => { const dd = Math.hypot(q.x - p.x, q.z - p.z); if (dd < bd) { bd = dd; bi = i; } }); R.i = bi;
+  }
   const h = t.g.rotation.y;
   for (const o of R.cv.members) {
     if (o === t || !(o.alive || o.wreck)) continue;
@@ -8994,6 +9242,7 @@ function destroyDepot(d) {
 }
 function rebuildDepots() {
   for (const t of generators) { t.alive = true; t.hp = 3; t.body.material = t.body.userData.mat0 ||= t.body.material; t.depot.lockdown = false; }
+  mapPings.length = 0; S.libLeft = undefined;
   for (const sm of starkMissiles) { sm.alive = false; sm.spent = false; sm.g.visible = true; sm.flame.visible = false; sm.home.decompose(sm.g.position, sm.g.quaternion, _e3); sm.depot.launchAt = 0; }
   S.bossFought = false;
   for (const t of tanks) if (t.guard && !t.alive) t.respawn = now + 2;
@@ -9148,7 +9397,8 @@ function updateDepots_(dt) {
       U.uA.value = d.alive ? Math.min(1, U.uA.value + dt) : Math.max(0, U.uA.value - dt / 1.5);
       d.hutShield.visible = U.uA.value > 0.01;
     }
-    if (!d.node && d.beacon) { const gl = d.beacon.getObjectByName('beacon_glow'), lp = d.beacon.getObjectByName('beacon_lamp'); gl.visible = d.alive; if (d.beacon !== d.g) lp.material = d.alive ? beaconMat : poleMat; }
+    // 山洞那座：救出人质拿到情报（或者自己摸到洞口 80 米内）之前信标灯不亮，不然远远一眼就看见
+    if (!d.node && d.beacon) { const on = d.alive && !(d.cave && d.hidden), gl = d.beacon.getObjectByName('beacon_glow'), lp = d.beacon.getObjectByName('beacon_lamp'); gl.visible = on; if (d.beacon !== d.g || d.cave) lp.material = on ? beaconMat : poleMat; }
     if (d.tower && d.alive) d.meshes.forEach(m => { if (m.name === 'tower_light') m.material.emissiveIntensity = (now * 1.3 + i) % 1 < 0.5 ? 5 : 0.3; });
     if (d.dustAt && now >= d.dustAt) { d.dustAt = 0; if (d.alive) damage(d, 12); }
     // 起火：血掉一半后油罐顶上冒火和烟
@@ -9210,7 +9460,7 @@ const relayLabels = [];
 // 在你周围 45~60 米、高出你 18 米左右绕圈，机头始终对着你；机炮点射 + 火箭弹齐射，看得见你才开火
 // 打下来：冒着黑烟打转往下掉，砸地爆炸，残骸烧一阵；25 秒后从远处再来一架
 const HELI_HP = 10, MAX_HELIS = 2, HELI_SPEED = 22;
-const activeHelis = () => S.wave < 2 ? 0 : S.wave < 4 ? 1 : 2;
+const activeHelis = () => !CITY || S.wave < 2 ? 0 : S.wave < 4 ? 1 : 2;   // 沙漠不派直升机增援
 let heliProto = null;
 const heliBuf = await assetBuf.heli;
 if (heliProto === null && heliBuf) {
@@ -9237,8 +9487,10 @@ const helis = heliProto ? Array.from({ length: MAX_HELIS }, (_, i) => {
   return h;
 }) : [];
 function spawnHeli(h) {
+  const from = reinfFrom();
+  if (from === false) { h.respawn = now + 60; return; }
   if (!helis.some(o => o.alive)) notice('GUNSHIP INBOUND', '#ff5a3c');
-  const a = rnd() * Math.PI * 2, x = S.pos.x + Math.sin(a) * 260, z = S.pos.z + Math.cos(a) * 260;
+  const a = rnd() * Math.PI * 2, x = from ? from.x : S.pos.x + Math.sin(a) * 260, z = from ? from.z : S.pos.z + Math.cos(a) * 260;
   h.g.position.set(x, Math.max(S.pos.y, terrainH(x, z)) + (CITY ? 120 : 45), z);
   // 巡逻点：你附近 80~150 米（来搜，不是直接知道你在哪）
   const b = rnd() * Math.PI * 2, hr = 80 + rnd() * 70;
@@ -9620,7 +9872,7 @@ function updateUltron(dt) {
 // （以前 20/36 米/秒、撞上 2.5 米才炸：钢铁侠正常飞就比它快，永远追不上，看不到它自爆）----
 const kamiMat = new THREE.MeshStandardMaterial({ color: 0x6a0f0a, metalness: 0.5, roughness: 0.4 });
 const kamiLight = new THREE.MeshStandardMaterial({ color: 0x220000, emissive: 0xff2010, emissiveIntensity: 4 });
-const activeKamis = () => S.wave < 2 ? 0 : Math.min(4, 1 + Math.floor(S.wave / 2));
+const activeKamis = () => !CITY || S.wave < 2 ? 0 : Math.min(4, 1 + Math.floor(S.wave / 2));
 const kamis = Array.from({ length: 4 }, () => {
   const g = makeDrone();
   g.traverse(o => { if (o.isMesh && o.material === droneMat.body) o.material = kamiMat; });
@@ -9635,11 +9887,15 @@ const kamis = Array.from({ length: 4 }, () => {
   return k;
 });
 function spawnKami(k) {
+  const from = reinfFrom();
+  if (from === false) { k.respawn = now + 30; return; }
   const a = rnd() * Math.PI * 2;
   k.g.position.set(S.pos.x + Math.sin(a) * 150, S.pos.y + 15 + rnd() * 10, S.pos.z + Math.cos(a) * 150);
+  if (from) k.g.position.set(from.x + (rnd() - 0.5) * 20, terrainH(from.x, from.z) + 25, from.z + (rnd() - 0.5) * 20);
   if (k.g.position.y < terrainH(k.g.position.x, k.g.position.z) + 10) k.g.position.y = terrainH(k.g.position.x, k.g.position.z) + 10;
   k.vel.set(-Math.sin(a), 0, -Math.cos(a)).multiplyScalar(15);
-  Object.assign(k, { alive: true, hp: 0.5, born: now, lastD: undefined });
+  // 飞 30 秒没撞到就自爆：从基地飞过来的路上不算
+  Object.assign(k, { alive: true, hp: 0.5, born: now + k.g.position.distanceTo(S.pos) / 40, lastD: undefined });
   k.g.visible = true;
   if (!kamis.some(o => o !== k && o.alive)) notice('KAMIKAZE DRONES', '#ff3b2a');
 }
@@ -9689,7 +9945,12 @@ function updateKamis(dt) {
     if (k.beepT <= 0) { k.beepT = period; if (dist < 60) sfx.lock(0.5); }
     k.light.material.emissiveIntensity = k.beepT > period * 0.5 ? 8 : 0.5;
     // 近炸：4 米内正面撞上；10 米内擦身而过（距离开始变大）也炸，伤害按距离减
-    if (dist < 4 || (dist < 10 && k.lastD !== undefined && dist > k.lastD)) { hurt(dist < 4 ? 26 : 26 * (1 - (dist - 4) / 6) + 4); killKami(k, false); continue; }
+    if (dist < 4 || (dist < 10 && k.lastD !== undefined && dist > k.lastD)) {
+      hurt(dist < 4 ? 26 : 26 * (1 - (dist - 4) / 6) + 4);
+      // 在天上被撞上（6 米内）：跟挨导弹一样被炸翻掉下去（3 秒后空中重启，离地近就摔到地上）
+      if (dist < 6 && S.flying && !S.knock) knockDown(_e2.copy(S.pos).sub(p).setY(0.3));
+      killKami(k, false); continue;
+    }
     k.lastD = dist < 10 ? dist : undefined;
     // 撞墙或飞了 30 秒都没撞到：自己炸掉
     if (now - k.born > 30 || clipShot(p, _b.copy(p).addScaledVector(k.vel, dt * 2 + 0.5))) killKami(k, false);
@@ -10123,6 +10384,17 @@ function missionFailed(why) {
 // 黄方块坦克、红点无人机/小兵、橙三角直升机、大红点 Boss、橙菱形目标（武器库/信号塔，炸掉变灰叉）、白点导弹；远处的目标贴在边上
 const radarEl = document.getElementById('radar'), rctx = radarEl.getContext('2d');
 const RADAR_R = 250;
+// ---- 小地图闪光标记：屏幕上有「导弹发射、村子遇袭、人质要被处决」这类提示时，在小地图上同一位置闪一圈（出了范围贴在边上），
+// 不然光有几点钟方向找不到；同一处重复提示只续时间不叠加 ----
+// 这个点在不在镜头画面里
+const _iv = new V3();
+function inView(p) { const v = _iv.copy(p).project(camera); return v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1; }
+var mapPings = mapPings || [];
+function ping(p, col, secs) {
+  const o = mapPings.find(q => Math.hypot(q.x - p.x, q.z - p.z) < 60 && q.col === col);
+  if (o) { o.until = Math.max(o.until, now + secs); o.x = p.x; o.z = p.z; return; }
+  mapPings.push({ x: p.x, z: p.z, col, until: now + secs, t0: now });
+}
 function drawRadar() {
   const W = radarEl.width, c = W / 2, R0 = c - 8;
   rctx.clearRect(0, 0, W, W);
@@ -10161,6 +10433,16 @@ function drawRadar() {
   for (const m of starkMissiles) if (m.alive) dot(m.g.position, (now * 4) % 1 < 0.5 ? '#ff2a1a' : '#ffffff', 8, 'tri', true);   // 斯塔克导弹：闪烁的红三角，贴边也标
   for (const k of kamis) if (k.alive) dot(k.g.position, '#ff3bd0', 5);
   for (const m of sams) dot(m.g.position, m.alive ? '#c070ff' : 'rgba(200,200,200,.5)', 7, m.alive ? 'sq' : 'x', m.alive);
+  for (let i = mapPings.length - 1; i >= 0; i--) {
+    const P = mapPings[i]; if (now > P.until) { mapPings.splice(i, 1); continue; }
+    const q = toR(P, true); if (!q) continue;
+    const k = ((now - P.t0) * 1.2) % 1;
+    rctx.strokeStyle = P.col; rctx.globalAlpha = 1 - k; rctx.lineWidth = 3;
+    rctx.beginPath(); rctx.arc(q[0], q[1], 6 + k * 22, 0, Math.PI * 2); rctx.stroke();
+    rctx.globalAlpha = (now * 3) % 1 < 0.6 ? 1 : 0.35; rctx.fillStyle = P.col;
+    rctx.beginPath(); rctx.arc(q[0], q[1], 7, 0, Math.PI * 2); rctx.fill();
+    rctx.globalAlpha = 1;
+  }
   const pulse = 9 + Math.sin(now * 6) * 2;
   if (boss?.alive) dot(boss.g.position, '#ff2a1a', pulse, 'dot', true);
   if (ultron?.alive) dot(ultron.g.position, '#ff2a1a', pulse, 'dot', true);
@@ -10177,7 +10459,7 @@ const ZH_SEG = {
   'CONVOY DESTROYED': '车队已摧毁', 'DRONES CLEARED': '无人机已清除', 'DRONES INBOUND': '无人机来袭', 'EMP HIT': '被电磁脉冲击中', 'THRUSTERS OFFLINE': '推进器失灵', 'ENEMY RADIO': '敌方无线电',
   'ARTILLERY INCOMING': '炮击来袭', 'GUNSHIP INBOUND': '武装直升机来袭', 'EXTREMIS ON SUIT': '绝境战士扒在战衣上', 'DODGE (⌥) TO SHAKE IT OFF': '按 ⌥ 闪避把它甩掉', 'EXTREMIS SOLDIER DOWN': '绝境战士已消灭',
   'EXTREMIS THROWN OFF': '甩掉了绝境战士', 'F-22s DISENGAGING': 'F-22 脱离', 'RETURNING TO BASE': '返航', 'FOX TWO': '敌机发射导弹', 'MISSILE INBOUND': '导弹来袭', 'FLARES (X)': '放干扰弹（X）',
-  'FRIENDLY AIRCRAFT HIT': '误击友军飞机', 'CEASE FIRE': '停火', 'FRIENDLY PILOT KILLED': '友军飞行员死亡', 'GROUND POUND': '重拳砸地', 'GULMIRA LIBERATED': '古尔米拉已解放', 'REPAIR PAD ONLINE': '维修台启用',
+  'FRIENDLY AIRCRAFT HIT': '误击友军飞机', 'CEASE FIRE': '停火', 'FRIENDLY PILOT KILLED': '友军飞行员死亡', 'GROUND POUND': '重拳砸地', 'GULMIRA LIBERATED': '古尔米拉已解放', 'GULMIRA': '古尔米拉', 'REPAIR PAD ONLINE': '维修台启用',
   'THE VILLAGE IS YOUR BASE NOW': '村子现在是你的基地', 'GUNSHIP DOWN': '武装直升机已击落', 'HAMMER DRONE DOWN': '汉默无人机已击毁', 'HANGAR DOOR BREACHED': '仓库大门已炸开', 'STARK WEAPONS INSIDE': '里面是斯塔克武器',
   'HIT': '被击中', 'THRUSTERS DOWN': '推进器失灵', 'HOSTILE RADIOING FOR SUPPORT': '敌人正在呼叫支援', 'HOSTILE SURRENDERED': '敌人投降', 'HOLD FIRE': '别开枪', 'IRON MONGER DEFEATED': '铁霸王已击败',
   'IRON MONGER': '铁霸王', 'JAMMER SIGNAL DETECTED': '发现干扰信号', 'JET DOWN': '战机被击落', 'PILOT EJECTED': '飞行员已弹射', 'MISSION PENALTY': '任务扣分', 'KAMIKAZE DRONES': '自杀式无人机',
@@ -10198,7 +10480,7 @@ const ZH_SEG = {
   'NO TARGET': '没有目标', 'DARK MODE': '潜行模式', 'LIGHTS OFF': '关灯', 'DARK MODE OFF': '潜行模式关闭', 'SUIT OFFLINE': '战衣宕机', 'REBOOTING': '正在重启', 'EMP': '电磁脉冲', 'SUIT CRITICAL': '战衣严重受损',
   'SHIELDED': '有护盾', 'MISSILE INCOMING': '导弹来袭', 'BLAST SHUTTER': '防爆钢板', 'DEPOT LOCKDOWN': '武器库封锁', 'LOCKDOWN': '封锁', 'FLARES RECHARGING': '干扰弹冷却中', 'GENERATOR DOWN': '发电机已炸毁',
   'HAMMER DRONES INBOUND': '汉默无人机来袭', 'HOSTAGES RESCUED': '人质已获救', 'OFFICER DOWN': '小队长被打倒', 'HOSTILES BREAKING': '敌人溃散', 'POWER RELAY DOWN': '供能塔已摧毁',
-  'RESCUED VILLAGERS ARRIVED HOME': '获救的村民回到了村子', 'SCAN RECHARGING': '扫描冷却中', 'VILLAGER KILLED IN SHELLING': '村民在炮击中死亡', 'TARGETS LOCKED': '已锁定目标', 'SCAN': '扫描',
+  'RESCUED VILLAGERS ARRIVED HOME': '获救的村民回到了村子', 'SCAN RECHARGING': '扫描冷却中', 'VILLAGER KILLED IN SHELLING': '村民在炮击中死亡', 'TARGETS LOCKED': '已锁定目标', 'MISSILES LOCK TANKS, JETS, STARK MISSILES': '导弹只锁坦克、飞机、斯塔克导弹', 'SCAN': '扫描',
   'DEPOT DESTROYED': '武器库已摧毁', 'NODE DESTROYED': '干扰节点已摧毁', 'ALL DEPOTS DESTROYED': '武器库全部摧毁', 'ALL NODES DESTROYED': '干扰节点全部摧毁', 'HEAVY ASSAULT ARMOR': '重型突击装甲',
   'THERE ARE NO STRINGS ON ME': '我身上没有牵线', 'STARK MISSILE': '斯塔克导弹', 'STARK MISSILE INBOUND': '斯塔克导弹来袭', 'JAMMER NODE': '干扰节点', 'WEAPONS DEPOT': '武器库', 'POWER RELAY': '供能塔', 'SAM SITE': '防空导弹车', 'GENERATOR': '发电机', 'HANGAR DOOR': '仓库大门',
   'WEAPONS HANGAR': '武器仓库', 'MISSION COMPLETE': '任务完成', 'MISSION FAILED': '任务失败', 'SCORE': '得分', 'TIME': '用时', 'BEST TIME': '最快用时', 'RUNS ON THIS MAP': '这张地图玩过', 'FIRST CLEAR': '首次通关',
@@ -10213,7 +10495,7 @@ const ZH_RE = [
   [/^(\d+) OF (\d+) DEPOTS LOCATED$/, '已知 $1 个武器库（共 $2 个）'], [/^(CAVE WEAPONS CACHE|WEAPONS DEPOT) LOCATED$/, (m, a) => (a === 'WEAPONS DEPOT' ? '一个武器库' : '山洞武器库') + '位置已标出'],
   [/^IRON MONGER ATTACKING THE (VILLAGE|OASIS|OIL FIELD|RADAR STATION)$/, (m, a) => '铁霸王正在袭击' + ({ VILLAGE: '村子', OASIS: '绿洲', 'OIL FIELD': '油田', 'RADAR STATION': '雷达站' })[a]],
   [/^CIVILIAN CASUALTIES (\d+)$/, '平民伤亡 $1'], [/^FOLLOW THE BEAMS?$/, '顺着光束找'], [/^DESTROY (\d+) POWER RELAYS?$/, '摧毁 $1 座供能塔'], [/^(\d+) RELAYS? LEFT$/, '还剩 $1 座供能塔'],
-  [/^WAVE (\d+)$/, '第 $1 波'], [/^VILLAGE IMPACT (\d+)s$/, '$1 秒后命中村子'], [/^STARK MISSILE LAUNCH IN (\d+)s$/, '斯塔克导弹 $1 秒后发射'], [/^(\d+) MISSILES? DECOYED$/, '骗走 $1 枚导弹'], [/^MACH (\d+)$/, '$1 马赫'], [/^(\d+) SIGNALS? FOUND$/, '发现 $1 个信号'],
+  [/^WAVE (\d+)$/, '第 $1 波'], [/^MISSILES (\d+)$/, '导弹 $1 枚'], [/^VILLAGE IMPACT (\d+)s$/, '$1 秒后命中村子'], [/^STARK MISSILE LAUNCH IN (\d+)s$/, '斯塔克导弹 $1 秒后发射'], [/^(\d+) MISSILES? DECOYED$/, '骗走 $1 枚导弹'], [/^MACH (\d+)$/, '$1 马赫'], [/^(\d+) SIGNALS? FOUND$/, '发现 $1 个信号'],
   [/^(DEPOT|NODE) (\d+)m$/, (m, a, d) => (a === 'DEPOT' ? '武器库 ' : '干扰节点 ') + d + ' 米'], [/^POWER RELAY (\d+)m$/, '供能塔 $1 米'], [/^(\d+) HOSTAGES DIED$/, '死了 $1 个人质'],
   [/^NEW BEST \(was (.+)\)$/, '新纪录（原来 $1）'], [/^(\d+) JET DOWN$/, '击落 $1 架战机'],
 ];
@@ -10255,13 +10537,13 @@ function updateHud(dt) {
   const tg = aim.target, tt = $('ttag');
   const tname = !tg ? '' : tg.kind === 'depot' ? (tg.node ? 'JAMMER NODE' : 'WEAPONS DEPOT') : tg.kind === 'relay' ? 'POWER RELAY' : tg.kind === 'sam' ? 'SAM SITE' : tg.kind === 'generator' ? 'GENERATOR' : tg.kind === 'door' ? 'HANGAR DOOR' : tg.kind === 'hut' ? 'WEAPONS HANGAR' : '';
   if (tname && tg.alive) {
-    const shielded = tg.kind === 'hut' || (tg.kind === 'door' && tg.depot.lockdown && gensUp(tg.depot)) || tg.kind === 'depot' && (tg.node ? tg.relays.some(r => r.alive) : tg.lockdown && gensUp(tg));
+    const shielded = tg.kind === 'hut' || (tg.kind === 'door' && tg.depot.lockdown && gensUp(tg.depot)) || tg.kind === 'depot' && (tg.node ? tg.relays.some(r => r.alive) : tg.lockdown && gensUp(tg) && !inHangar(tg));
     const full = tg.kind === 'depot' ? DEPOT_HP : tg.kind === 'relay' ? 4 : tg.kind === 'generator' ? 3 : tg.kind === 'door' ? DOOR_HP : SAM_HP, n = Math.ceil(clamp(tg.hp / full, 0, 1) * 8);
     tt.textContent = zh(tname) + '  ' + (shielded ? '有护盾' : '▮'.repeat(n) + '▯'.repeat(8 - n));
     tt.style.display = 'block';
   } else tt.style.display = 'none';
   const cds = [1 - S.repCd / REP_CD, S.uni.state === 'idle' ? 1 - S.uni.cd / 4 : 0, S.laser.on ? 1 - S.laser.t / LASER_MAX : 1 - S.laser.cd / 3, 1 - S.gun.cd / 3.5,
-    S.snap.state === 'idle' ? 1 - S.snap.cd / SNAP_CD : 0, 1 - (S.dashCd - now) / DASH_CD];
+    1 - Math.max(0, (S.mcd || 0) - now) / MINI_CD, 1 - (S.dashCd - now) / DASH_CD];
   cds.forEach((r, i) => {
     hud.w[i].lastChild.style.transform = `scaleX(${clamp(r, 0, 1)})`;
     hud.w[i].classList.toggle('cd', r < 1);
