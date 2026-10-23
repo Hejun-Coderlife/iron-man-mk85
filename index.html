@@ -3522,6 +3522,8 @@ function supportH(x, z, y) {
   near = nearBlockers(_cA.set(x, y, z), 3);
   const hit = castBlock(_cA.set(x, y + 0.6, z), DOWN, 80);
   if (hit) g = Math.max(g, hit.point.y);
+  // 维修停机坪：站在台面上（以前没碰撞，脚陷在台子里）
+  if (homePad && y >= homePad.top - 0.6 && Math.hypot(x - homePad.p.x, z - homePad.p.z) < 5.1) g = Math.max(g, homePad.top);
   for (const t of tanks) {
     if (!t.alive && !t.wreck) continue;
     const c = Math.cos(t.g.rotation.y), sn = Math.sin(t.g.rotation.y);
@@ -3602,9 +3604,7 @@ function physics(dt) {
     if (now < (S.stunUntil || 0) || S.down) wish.set(0, 0, 0);   // 倒地、爬起来的时候走不了
     if (wish.lengthSq() > 1) wish.normalize();
     if (S.flying || S.down) S.crouchOn = false;
-    let sp = (S.takeoffT >= 0 || S.landT > 0.15) ? 0 : S.crouchOn ? 1.3 : boost && !S.dark ? 6.5 : 2.4;
-    // 始终面朝镜头前方：按 S 是往后退（倒着走，最多 2 米/秒），按 A/D 是横着走，不再转身对着镜头
-    if (iz < 0) sp = Math.min(sp, S.crouchOn ? 1.3 : 2.0);
+    const sp = (S.takeoffT >= 0 || S.landT > 0.15) ? 0 : S.crouchOn ? 1.3 : boost && !S.dark ? 6.5 : 2.4;
     const k = damp(10, dt);
     S.vel.x += (wish.x * sp - S.vel.x) * k;
     S.vel.z += (wish.z * sp - S.vel.z) * k;
@@ -3665,7 +3665,10 @@ function physics(dt) {
     // 每迈一步（相位过 π）响一声脚步
     const step = Math.floor(S.walkPhase / Math.PI);
     if (step !== S.lastStep) { S.lastStep = step; if (hs > 0.5 || S.turnStep > 0.3) sfx.step(clamp(hs / 6, 0.4, 1)); }
-    yawT = S.faceYaw ?? camYaw;   // 地面上身体一直朝镜头前方（以前朝走的方向转，按 S 就转过来正对镜头、按 A/D 侧身）
+    // 地面朝向：按 S（往回走）转过来正对镜头走；只按 A/D 横着走、身体仍朝前（以前 A/D 也转成侧身对着镜头）
+    if (aiming) yawT = S.faceYaw ?? camYaw;
+    else if (iz < 0 && wish.lengthSq() > 0.01) yawT = Math.atan2(wish.x, wish.z);
+    else yawT = camYaw;
     const yaw0 = S.yaw;
     S.yaw = lerpAngle(S.yaw, yawT, damp(10, dt));
     if (S.pivot) S.yaw = S.pivot.yaw;
@@ -3719,9 +3722,9 @@ function physics(dt) {
       if (!key.Space || S.down || S.dropIn || empOn || S.knock) land();
       else S.vel.y = Math.max(S.vel.y, 0);
     }
-    // 飞行：大体往前飞（和镜头方向差 60° 以内）时身体顺着飞行方向；往后退、横移时身体仍朝镜头前方（靠前后倾、侧倾表现）
+    // 飞行：大体往前飞（和镜头方向差 60° 以内）或按 S 往回飞时身体顺着飞行方向；只横移时身体仍朝镜头前方（靠侧倾表现）
     const velYaw = Math.atan2(S.vel.x, S.vel.z);
-    yawT = aiming ? S.faceYaw ?? camYaw : hs > 3 && Math.abs(angDiff(velYaw, camYaw)) < 1.05 ? velYaw : camYaw;
+    yawT = aiming ? S.faceYaw ?? camYaw : hs > 3 && (iz < 0 || Math.abs(angDiff(velYaw, camYaw)) < 1.05) ? velYaw : camYaw;   // 按 S 往回飞：照旧转过来正对镜头
     S.yaw = lerpAngle(S.yaw, yawT, damp(S.uni.state !== 'idle' ? 12 : 4, dt));   // 按了胸口光束：充能那 0.7 秒里赶紧转向准星
     const fwd = S.vel.x * Math.sin(S.yaw) + S.vel.z * Math.cos(S.yaw);
     const side = -S.vel.x * Math.cos(S.yaw) + S.vel.z * Math.sin(S.yaw);
@@ -4372,6 +4375,7 @@ function damage(t, amt) {
   if (t.kind === 'civilian') { if (t.alive) civilianHit(t); return; }   // 自己人：扣分
   if (t.kind === 'generator') { t.hp -= amt; if (t.hp <= 0 && t.alive) killGenerator(t); return; }
   if (t.kind === 'prop') return;
+  if (t.kind === 'hut' || t.kind === 'door' || t.kind === 'depot') armStark(t.depot || t);
   if (t.kind === 'hut' || (t.kind === 'depot' && t.door?.alive)) {
     // 打仓库外壳：冒火花，提示去打门（门开了就从门口往里打）
     const d = t.depot || t;
@@ -7092,7 +7096,7 @@ float shore(float a) { return 1.0 + 0.16 * sin(3.0 * a + 1.0) + 0.09 * sin(5.0 *
   // 出生村子的维修停机坪：深色圆台 + 一圈反应堆蓝光；落在上面装甲护盾补满（45 秒一次）
   {
     const g = new THREE.Group(); g.position.set(HOME.x + 6, terrainH(HOME.x + 6, HOME.z + 6), HOME.z + 6);
-    const pad = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.3, 0.25, 40), new THREE.MeshStandardMaterial({ color: 0x2c2f33, metalness: 0.5, roughness: 0.6 })); pad.position.y = 0.12; pad.receiveShadow = true;
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(5, 5.3, 1.45, 40), new THREE.MeshStandardMaterial({ color: 0x2c2f33, metalness: 0.5, roughness: 0.6 })); pad.position.y = -0.48;   // 往下埋 1.2 米：坡地上低的一边不悬空 pad.receiveShadow = true;
     const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 2.2, 3), toneMapped: false });
     const ring = new THREE.Mesh(new THREE.TorusGeometry(4.2, 0.12, 8, 48).rotateX(Math.PI / 2), ringMat); ring.position.y = 0.27;
     const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.08, 8, 32).rotateX(Math.PI / 2), ringMat); ring2.position.y = 0.27;
@@ -7100,7 +7104,7 @@ float shore(float a) { return 1.0 + 0.16 * sin(3.0 * a + 1.0) + 0.09 * sin(5.0 *
     for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + 0.785, l = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), ringMat); l.position.set(Math.sin(a) * 4.8, 0.35, Math.cos(a) * 4.8); g.add(l); }
     g.traverse(o => { o.raycast = () => {}; });
     scene.add(g);
-    homePad = { p: g.position.clone(), ringMat, cd: 0 };
+    homePad = { p: g.position.clone(), ringMat, cd: 0, top: g.position.y + 0.25 };   // 台面高度：supportH 里能站上去
   }
 }
 // ---- 平民（绿洲村民、救回来的村民、人质）：身上一个看不见的盒子做被击中判定——掌心炮、光束、激光打中会死，算平民伤亡；
@@ -8441,20 +8445,24 @@ function addLauncherSimple(d) {
 }
 var starkMissiles = starkMissiles || [];
 const SM_SPEED = 110, SM_FUSE = 20;
-// 警报 → 发射倒计时
-onAlarm.push((c, how) => {
-  if (CITY) return;
-  const arm = (d, t) => { if (d && d.alive && d.missile && !d.missile.alive && !(d.launchAt > now) && !d.missile.spent) d.launchAt = now + t; };
-  arm(c.depot, SM_FUSE);
-  if (how === 'radio') camps.filter(o => o && o !== c && o.depot).forEach((o, k) => arm(o.depot, 45 + k * 50));   // 一枚接一枚，间隔 50 秒
-});
+// 发射倒计时：只有你动手打这座武器库（打外壳、大门、里面）才开始，20 秒后从它的发射车上发射
+// （以前拉警报、敌人呼叫支援也会让别的营地发射，玩家根本不知道导弹从哪来）
+function armStark(d) {
+  if (CITY || !d || !d.alive || !d.missile || d.missile.alive || d.missile.spent || d.launchAt > now) return;
+  d.launchAt = now + SM_FUSE;
+}
 function launchStark(sm) {
   sm.alive = true; sm.hp = 3; sm.t = 0;
   sm.flame.visible = true;
   sm.vel.set(0, 1, 0).applyQuaternion(sm.g.quaternion).multiplyScalar(30);
-  explosion(sm.g.position.clone(), 0.8);
-  sfx.cannon(sm.g.position);
-  notice('STARK MISSILE LAUNCHED · INTERCEPT IT', '#ff3b2a', 2500);
+  const p = sm.g.position;
+  // 发射点：大火光 + 一大团白烟往上翻，远处也看得见从哪发的
+  explosion(p.clone(), 1.6);
+  flash(p, COL.fire, 20000);
+  for (let k = 0; k < 60; k++) emitSmoke(_a.set(p.x + (rnd() - 0.5) * 8, p.y + rnd() * 4, p.z + (rnd() - 0.5) * 8), _v.set((rnd() - 0.5) * 6, 2 + rnd() * 4, (rnd() - 0.5) * 6), 10 + rnd() * 6, 6 + rnd() * 5);
+  sfx.cannon(p); sfx.boom(p, 0.7);
+  // 告诉你从哪发的：几点钟方向（按镜头朝向）、多远
+  notice(`STARK MISSILE LAUNCHED · ${clockOf(p.x, p.z)} · ~${Math.round(Math.hypot(p.x - S.pos.x, p.z - S.pos.z))} m · INTERCEPT IT`, '#ff3b2a', 4000);
 }
 function killStark(sm, shot) {
   sm.alive = false; sm.spent = true;
