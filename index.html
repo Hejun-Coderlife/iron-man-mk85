@@ -494,11 +494,18 @@ composer.addPass(new OutputPass());
 // 调色（在最终 sRGB 画面上）：S 形曲线加对比、亮部偏暖暗部微冷、饱和度略提、四角压暗、极轻的胶片颗粒
 // uWarm 跟着太阳走：白天 1，夜里接近 0（夜景不该发黄）
 const grade = new ShaderPass({
-  uniforms: { tDiffuse: { value: null }, uWarm: { value: 1 }, uTime: { value: 0 }, uSpeed: { value: 0 }, uAspect: { value: 1 }, uEmp: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, uWarm: { value: 1 }, uTime: { value: 0 }, uSpeed: { value: 0 }, uAspect: { value: 1 }, uEmp: { value: 0 }, uBlur: { value: 0 }, uFlash: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uWarm, uTime, uSpeed, uAspect, uEmp; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uWarm, uTime, uSpeed, uAspect, uEmp, uBlur, uFlash; varying vec2 vUv;
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // 径向动态模糊：高速飞行、近处爆炸时画面四周往中心拉出拖影（中心清楚），只在需要时多采样
+      if (uBlur > 0.005) {
+        vec2 dir = (vUv - 0.5) * uBlur * 0.06;
+        vec3 acc = c;
+        for (int i = 1; i < 6; i++) acc += texture2D(tDiffuse, vUv - dir * float(i)).rgb;
+        c = acc / 6.0;
+      }
       c = mix(c, c * c * (3.0 - 2.0 * c), 0.22);
       float l = dot(c, vec3(0.299, 0.587, 0.114));
       vec3 tone = mix(vec3(0.97, 1.0, 1.04), vec3(1.06, 1.0, 0.9), smoothstep(0.15, 0.75, l));
@@ -525,6 +532,8 @@ const grade = new ShaderPass({
         c = mix(c, mix(dot(c2, vec3(0.3, 0.55, 0.15)) * vec3(0.8, 0.92, 1.1), vec3(sn) * 0.8, 0.12 + 0.3 * tear), uEmp * (0.3 + 0.35 * tear));
         c *= 1.0 - uEmp * 0.1 * step(0.5, fract(vUv.y * 220.0));
       }
+      // 爆炸闪光：整个画面一下被照亮发暖，0.2 秒褪掉
+      c = mix(c, vec3(1.0, 0.9, 0.7), uFlash * 0.35) + uFlash * 0.06;
       float g = fract(sin(dot(vUv * 1000.0 + uTime, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
       gl_FragColor = vec4(c + g * 0.012, 1.0);
     }`,
@@ -3045,9 +3054,13 @@ function explosion(p, s = 1) {
     randDir(_d);
     emit(p, _v.copy(_d).multiplyScalar((2 + rnd() * 3) * s), 1.5 + rnd(), 2 * s, 4);
   }
-  flash(p, COL.fire, 400 * s);
+  flash(p, COL.fire, 450 * s);
+  // 火球核心：一团又大又亮、往上翻的火（以前只有一圈小火星，显得小气）
+  { const sc = Math.min(s, 1.4); for (let i = 0; i < 10 * sc; i++) { randDir(_d); _d.y = Math.abs(_d.y); emit(_a.copy(p).addScaledVector(_d, 0.5 * sc), _v.copy(_d).multiplyScalar((2 + rnd() * 3) * sc).add(_b.set(0, 3 * sc, 0)), 0.8 + rnd() * 0.4, (1.8 + rnd() * 1.2) * sc, 1); } }   // 大爆炸（坦克、仓库）火球不跟着无限变大，不然近处整屏发白
+  for (let i = 0; i < 6 * s; i++) emitSmoke(_a.copy(p).add(_b.set((rnd() - 0.5) * 2 * s, rnd() * s, (rnd() - 0.5) * 2 * s)), _v.set((rnd() - 0.5) * 3, 2.5 + rnd() * 2, (rnd() - 0.5) * 3), (4 + rnd() * 3) * s, 2.5 + rnd() * 1.5);
   sfx.boom(p, s);
   S.shake = Math.max(S.shake, s * clamp(1 - p.distanceTo(S.pos) / 80, 0, 1));
+  { const k = Math.min(1, s * 0.6) * clamp(1 - p.distanceTo(S.pos) / 70, 0, 1); S.flashK = Math.max(S.flashK || 0, k * k * 0.2); S.blurK = Math.max(S.blurK || 0, k * k * 0.3); if (k > 0.25 && !S.flying) hitStop(40 * k); }   // 闪光、拖影按距离平方：远处的爆炸几乎不闪
   cityLife?.panic(p, s);
   blastSoldiers(p, 2 + 2.5 * s, 9 + 6 * s);
   makeNoise(p, 70 * s);
@@ -3901,7 +3914,10 @@ function meleeHit(t, name) {
   if (!t.alive) return;
   const p = t.g.position, dir = _e2.set(p.x - S.pos.x, 0, p.z - S.pos.z).normalize();
   for (let i = 0; i < 18; i++) emit(_a.copy(p).setY(p.y + 1.2), randDir(_v).multiplyScalar(4).addScaledVector(dir, 4), 0.35, 0.3, 2);
-  sfx.hit?.(true); S.shake = Math.max(S.shake, 0.35);
+  sfx.hit?.(true); S.shake = Math.max(S.shake, 0.2);
+  hitStop(name === 'roundhouse' || name === 'kick' ? 110 : 70);
+
+  if (t.kind === 'soldier') { t._hitPow = name === 'kick' || name === 'roundhouse' || name === 'uppercut' ? 13 : 9; t._hitUp = name === 'uppercut' ? 7 : 3; slowMo(380, 0.3); }
   // 士兵一下打飞；绝境战士、机器人吃 3 点并被踹退
   if (t.kind === 'soldier') damage(t, 5);
   else { const big = name === 'kick' || name === 'roundhouse'; damage(t, big ? 4 : 3); if (t.alive) p.addScaledVector(dir, big ? 4 : 2); }
@@ -4721,11 +4737,17 @@ function fireRepulsor(hand = 'R') {
   for (let i = 0; i < 14; i++) { randDir(_v); _v.addScaledVector(_d, -_v.dot(_d)).setLength(2.5); emit(from, _v, 0.18, 0.12, 3); }
   flash(from, COL.cyan, 12);
   if (hand === 'R') { S.recoil = 1; S.palmFlash = 1; } else { S.recoilL = 1; }
+
   sfx.repulsor(to);
   S.repCd = REP_CD;
   playerNoise();
   // 掌心炮适合打无人机、导弹；对坦克装甲伤害打折扣（打坦克用激光最快）
-  if (aim.target && !wall && !outR) damage(aim.target, aim.target.kind === 'tank' ? 0.6 : 1);
+  if (aim.target && !wall && !outR) {
+    const tg = aim.target;
+    if (tg.kind === 'soldier') { tg._hitPow = 7; tg._hitUp = 2.5; }
+    damage(tg, tg.kind === 'tank' ? 0.6 : 1);
+    if (!tg.alive || tg.kind === 'tank') hitStop(45);
+  }
 }
 
 // 抓起扔出：地上贴脸（2.8 米内正前方）有士兵时按右键，抓起来甩出去，砸中的人一起倒
@@ -4966,7 +4988,7 @@ function weapons(dt) {
       randDir(_d).multiplyScalar(0.5 + rnd() * 0.4);
       emit(_a.copy(reactor).add(_d), _v.copy(_d).multiplyScalar(-5.8), 0.3, 0.06, 3);
     }
-    if (U.t >= 0.7) { U.state = 'fire'; U.t = 0; sfx.uniFire(); S.shake = Math.max(S.shake, 0.6); }
+    if (U.t >= 0.7) { U.state = 'fire'; U.t = 0; sfx.uniFire(); S.shake = Math.max(S.shake, 0.6); S.flashK = Math.max(S.flashK || 0, 0.35); }
   } else if (U.state === 'fire') {
     U.t += dt;
     reactorGlow = 30 + Math.sin(now * 50) * 4;
@@ -6356,7 +6378,7 @@ function spawnBoss() {
 function killBoss() {
   boss.reported = false;
   S.ceasefire = true;
-  slowUntil = performance.now() + 2000;
+  slowUntil = rawNow + 2000; slowK = 0.35;
   for (const m of [...atgms]) killAtgm(m, true);
   boss.alive = false;
   boss.state = 'dead';
@@ -7232,6 +7254,14 @@ function killSoldier(s) {
   s.alive = false;
   s.deadT = 0;
   s.corpse = true;
+  // 中弹反应：顺着打来的方向被掀飞（掌心炮往后一推、近身连招打飞、爆炸炸上天），落地后在地上滑一段
+  if (s.role !== 'hammer' && !s.roof) {
+    const from = s._hitFrom || S.pos, pw = s._hitPow ?? 5.5, up = s._hitUp ?? 2.2;
+    const dir = new V3(s.g.position.x - from.x, 0, s.g.position.z - from.z); if (dir.lengthSq() < 1e-4) dir.set(Math.sin(s.yaw), 0, Math.cos(s.yaw)); dir.normalize();
+    s.fling = { v: dir.multiplyScalar(pw).setY(up), spin: (rnd() - 0.5) * 4, tilt: 0, air: up > 0 };
+    s.yaw = Math.atan2(-dir.x, -dir.z);   // 面朝打来的方向、往后倒
+  }
+  s._hitFrom = null; s._hitPow = undefined; s._hitUp = undefined;
   s.dest = null;
   s.respawn = s.team === 'police' || s.role === 'hammer' ? Infinity : now + 90;
   s.calling = 0;
@@ -8276,7 +8306,7 @@ function blastSoldiers(p, kill, shock) {
     if (!o.alive || o.team !== 'enemy') continue;
     const d = o.g.position.distanceTo(p);
     if (o.role === 'hammer') { if (d < kill) damage(o, 3); continue; }
-    if (d < kill) killSoldier(o);
+    if (d < kill) { o._hitFrom = p; o._hitPow = 6 + 5 * (1 - d / kill); o._hitUp = 7 + 5 * (1 - d / kill); killSoldier(o); }
     else if (d < shock && !o.surrender) { o.panic = now + 1.6 + rnd() * 1.2; o.panicFrom = p.clone(); o.calling = 0; alertOne(o, S.pos); }
   }
 }
@@ -8520,6 +8550,18 @@ function updateSoldiers(dt) {
       s.deadT += dt;
       // 枪脱手：从手里的位置往下掉、转平，躺在尸体旁边
       if (s.dropFrom) dropRifle(s, s.deadT);
+      if (s.fling) {
+        const F = s.fling, gy = terrainH(p.x, p.z);
+        F.v.y -= 22 * dt;
+        const nx = p.x + F.v.x * dt, nz = p.z + F.v.z * dt;
+        if (stepClear(s, p, nx, nz)) { p.x = nx; p.z = nz; } else { F.v.x *= -0.25; F.v.z *= -0.25; }   // 撞墙弹回一点
+        p.y += F.v.y * dt;
+        s.yaw += F.spin * dt * (F.air ? 1 : 0.2);
+        if (p.y <= gy) { p.y = gy; if (F.v.y < -3 && F.air) { F.v.y = -F.v.y * 0.25; for (let i = 0; i < 8; i++) emitSmoke(_a.set(p.x + (rnd() - 0.5), gy + 0.2, p.z + (rnd() - 0.5)), _v.set((rnd() - 0.5) * 2, 0.8, (rnd() - 0.5) * 2), 1.2, 0.9); } else F.v.y = 0; F.air = p.y > gy + 0.05; F.v.x *= Math.exp(-dt * 5); F.v.z *= Math.exp(-dt * 5); }
+        F.tilt = Math.min(1, F.tilt + dt * 3);
+        s.g.rotation.set(0, s.yaw, 0);
+        if (F.v.lengthSq() < 0.05 && !F.air) s.fling = null;
+      }
       if (s.role === 'hammer') {
         // 半空被打爆：掉下来；残骸躺 20 秒后收回（下次警报再派出来）
         const gy = terrainH(s.g.position.x, s.g.position.z);
@@ -10588,7 +10630,7 @@ function killUltron() {
   U.reported = false;
   ultronBeam.visible = false;
   S.ceasefire = true;
-  slowUntil = performance.now() + 2000;
+  slowUntil = rawNow + 2000; slowK = 0.35;
   for (const m of [...atgms]) killAtgm(m, true);
   S.nextUltron = S.wave + 4;
 }
@@ -11156,7 +11198,11 @@ function updateCamera(dt) {
   // 全力冲刺时镜头跟得更紧：100 米/秒下普通的跟随延迟会落后 4 米，人被甩成远处一个小点
   camState.pivot.lerp(groundPivot.lerp(hipsW, S.fly), damp(25 + 50 * S.sc, dt));
   const sp = S.vel.length();
-  const distT = S.flying ? 5.2 + clamp(sp / 40, 0, 1) * 2.5 - S.sc * 0.8 : 4;
+  // 近身连招：镜头推近到 2.7 米；地上冲刺：稍微拉远一点，带点颠
+  const melee = S.act && COMBO.includes(S.act.name);
+  S.meleeCam = lerp(S.meleeCam || 0, melee ? 1 : 0, damp(melee ? 8 : 3, dt));
+  const hsC = Math.hypot(S.vel.x, S.vel.z), runK = !S.flying && hsC > 5 ? clamp((hsC - 5) / 5, 0, 1) : 0;
+  const distT = (S.flying ? 5.2 + clamp(sp / 40, 0, 1) * 2.5 - S.sc * 0.8 : 4 + runK * 0.6) - S.meleeCam * 1.3;
   camState.dist = lerp(camState.dist, distT, damp(3, dt));
   const cp = Math.cos(camPitch);
   const fwd = _d.set(Math.sin(camYaw) * cp, Math.sin(camPitch), Math.cos(camYaw) * cp);
@@ -11168,13 +11214,16 @@ function updateCamera(dt) {
   camRay.far = want;
   const block = camRay.intersectObjects(nearBlockers(camState.pivot, want + 2), false)[0];
   if (block) camera.position.copy(camState.pivot).addScaledVector(_camDir, Math.max(0.5, block.distance - 0.3));
+  // 飞行时镜头一律不震（用户要求，飞着晃看不清）；地上的震动幅度减半
+  if (S.flying) S.shake = 0;
   if (S.shake > 0.01) {
-    camera.position.add(randDir(_b).multiplyScalar(S.shake * 0.15));
+    camera.position.add(randDir(_b).multiplyScalar(S.shake * 0.07));
     S.shake *= Math.exp(-dt * 6);
   }
   camera.position.y = Math.max(camera.position.y, terrainH(camera.position.x, camera.position.z) + 0.3);
+  // 后坐：镜头往上一挑、往后一顿，很快回来
   camera.lookAt(_v.copy(camera.position).add(fwd));
-  let fovT = 62 + clamp(sp / 40, 0, 1) * 12 + S.sc * 10;   // 全力冲刺再拉宽，速度感
+  let fovT = 62 + clamp(sp / 40, 0, 1) * 12 + S.sc * 10 + runK * 5 - S.meleeCam * 6;   // 全力冲刺再拉宽，速度感；近战收窄
   // 开局从天而降：正面机位（他正前方 4.5 米、比腰低 1.5 米，到地面附近就停住），落地 1 秒后用 0.6 秒转回跟随镜头
   const iw = S.dropIn || S.hoverIntro ? 1 : 1 - smooth(S.introEnd ?? -1, (S.introEnd ?? -1) + 0.6, now);
   if (iw > 0.001) {
@@ -12030,11 +12079,19 @@ function updatePost() {
   }
   grade.uniforms.uTime.value = now % 50;
   grade.uniforms.uSpeed.value = S.sc;
+  const pdt = clamp(now - (updatePost.t ?? now), 0, 0.1); updatePost.t = now;
+  S.flashK = (S.flashK || 0) * Math.exp(-pdt * 9);
+  S.blurK = (S.blurK || 0) * Math.exp(-pdt * 5);
+  grade.uniforms.uFlash.value = S.flying ? 0 : S.flashK;   // 飞行时不闪屏
+  grade.uniforms.uBlur.value = 0;   // 径向模糊关掉：超音速时整屏拖影，用户嫌晃、看不清
   grade.uniforms.uEmp.value = clamp(((S.empUntil || 0) - now) / 0.6, 0, 1);
   grade.uniforms.uAspect.value = camera.aspect;
 }
 const clock = new THREE.Clock();
-let slowUntil = 0;
+let slowUntil = 0, slowK = 0.35, stopUntil = 0, rawNow = 0;
+// 打击感：顿帧（命中瞬间整个画面停住几十毫秒）、短慢动作（近身打倒人时）；按不减速的时钟 rawNow（毫秒）算，录视频逐帧走时也一样
+function hitStop(ms) { stopUntil = Math.max(stopUntil, rawNow + ms); }
+function slowMo(ms, k = 0.35) { const t = rawNow + ms; if (t > slowUntil) { slowUntil = t; slowK = k; } }
 let idleTick = 0;
 /* ================= 卡顿记录器 ================= */
 // 一直在后台记最近 90 秒每一帧：两帧间隔、逻辑耗时、渲染耗时、当时按着什么、激光/光束状态、画质；按 L 存成 json 到下载文件夹
@@ -12087,7 +12144,9 @@ function frame() {
   if (pauseEl.style.display === 'flex') { clock.getDelta(); if (++idleTick % 6 === 0) { updatePost(); composer.render(); } return; }
   if (startEl.style.display !== 'none' && ++idleTick % (S.hoverIntro ? 2 : 6)) return;
   // 打倒 Boss 的瞬间慢放 2 秒
-  const dt = Math.min(clock.getDelta(), 0.05) * (performance.now() < slowUntil ? 0.35 : 1);
+  const rawDt = Math.min(clock.getDelta(), 0.05);
+  rawNow += rawDt * 1000;
+  const dt = rawDt * (rawNow < stopUntil ? 0.03 : rawNow < slowUntil ? slowK : 1);
   now += dt;
   const pf0 = performance.now();
 
