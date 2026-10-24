@@ -4711,7 +4711,7 @@ function fireRepulsor(hand = 'R') {
     b.dist = from.distanceTo(to); b.silent = true;
     S.repCd = SILENT_CD;
     makeNoise(to, 10);
-    sfx.servo?.();
+    sfx.silenced?.();
     if (aim.target && !wall && !outR && aim.target.kind !== 'tank') damage(aim.target, 1);
     return;
   }
@@ -11746,6 +11746,14 @@ const sfx = (() => {
       noise(t + 0.02, 0.25, 'highpass', 3000, 900, 0.5);
       tone(t + 0.02, 0.2, 'sine', 160, 45, 0.6);
       noise(t + 0.08, 0.3, 'bandpass', 1500, 400, 0.6, 0.005, 1, spot(p));
+    },
+    // 潜行静音单发：短促的「噗」——高频气流嘶声 + 一下闷闷的低音，比掌心炮轻得多
+    silenced() {
+      if (!ok()) return;
+      const t = T();
+      noise(t, 0.09, 'bandpass', 4200, 1800, 0.35, 0.002, 2.5);
+      tone(t, 0.08, 'sine', 220, 70, 0.28, 0.002);
+      tone(t + 0.01, 0.05, 'triangle', 1400, 600, 0.06, 0.001);
     },
     uniCharge() {
       if (!ok()) return;
