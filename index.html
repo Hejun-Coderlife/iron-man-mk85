@@ -3758,7 +3758,7 @@ function physics(dt) {
     // 飞行：大体往前飞（和镜头方向差 60° 以内）或按 S 往回飞时身体顺着飞行方向；只横移时身体仍朝镜头前方（靠侧倾表现）
     const velYaw = Math.atan2(S.vel.x, S.vel.z);
     yawT = aiming ? S.faceYaw ?? camYaw : hs > 3 && (iz < 0 || Math.abs(angDiff(velYaw, camYaw)) < 1.05) ? velYaw : camYaw;   // 按 S 往回飞：照旧转过来正对镜头
-    S.yaw = lerpAngle(S.yaw, yawT, damp(S.uni.state !== 'idle' ? 12 : 4, dt));   // 按了胸口光束：充能那 0.7 秒里赶紧转向准星
+    S.yaw = lerpAngle(S.yaw, yawT, damp(aiming ? 12 : 4, dt));   // 开火、胸口光束充能时赶紧转向准星（以前开火也慢慢转，手先抬起来往侧后方打）
     const fwd = S.vel.x * Math.sin(S.yaw) + S.vel.z * Math.cos(S.yaw);
     const side = -S.vel.x * Math.cos(S.yaw) + S.vel.z * Math.sin(S.yaw);
     const aimW = Math.max(S.aimR, S.aimL, S.uniW);
@@ -4060,6 +4060,27 @@ function armAimAngles(n, target) {
   return { x: -Math.PI / 2 - Math.asin(clamp(_b.y, -1, 1)), y: Math.atan2(_b.x, _b.z) };
 }
 
+// 手臂瞄准的目标点限制在这条胳膊够得着、看着自然的范围：往外最多 70°、往里（横过胸口）最多 25°，绝不往身后指
+// （以前不限制：目标在侧后方时胳膊直接甩到身后反手打，身体还没转过来手就先抬了）
+const ARM_OUT = 1.22, ARM_IN = 0.44, _at = new V3();
+function armTarget(n, p) {
+  suit.bones['upperarm_' + n].getWorldPosition(_at);
+  const dx = p.x - _at.x, dz = p.z - _at.z, h = Math.hypot(dx, dz);
+  if (h < 0.01) return p;
+  const fx = Math.sin(S.yaw), fz = Math.cos(S.yaw);   // 身体前方；右方 = (-fz, fx)
+  let a = Math.atan2(-dx * fz + dz * fx, dx * fx + dz * fz);   // 正 = 在右边
+  a = n === 'R' ? clamp(a, -ARM_IN, ARM_OUT) : clamp(a, -ARM_OUT, ARM_IN);
+  const ca = Math.cos(a), sa = Math.sin(a);
+  return _at.set(_at.x + (fx * ca - fz * sa) * h, p.y, _at.z + (fz * ca + fx * sa) * h);
+}
+// 准星在不在这只手够得着的范围里（差 6° 以内才开火，不然先转身）
+function armReaches(n) {
+  const p = aim.point, fx = Math.sin(S.yaw), fz = Math.cos(S.yaw), dx = p.x - S.pos.x, dz = p.z - S.pos.z;
+  if (Math.hypot(dx, dz) < 2) return true;
+  const a = Math.atan2(-dx * fz + dz * fx, dx * fx + dz * fz);
+  return n === 'R' ? a > -ARM_IN - 0.1 && a < ARM_OUT + 0.1 : a < ARM_IN + 0.1 && a > -ARM_OUT - 0.1;
+}
+
 function pose(dt) {
   const B = suit.V, t = now;
   const hs = Math.hypot(S.vel.x, S.vel.z);
@@ -4265,12 +4286,12 @@ function pose(dt) {
     hx = lerp(hx, -1.3, u); hy = lerp(hy, 0, u);
     const w = n === 'R' ? S.aimR : S.aimL;
     if (w > 0.001) {
-      const a = armAimAngles(n, aim.point);
+      const a = armAimAngles(n, armTarget(n, aim.point));
       ux = lerp(ux, a.x - (n === 'R' ? S.recoil * 0.25 : 0), w);
       uy = lerp(uy, a.y, w);
       uz = lerp(uz, 0, w);
       fx = lerp(fx, 0, w);
-      hx = lerp(hx, n === 'R' ? -Math.PI / 2 : 0, w);
+      hx = lerp(hx, n === 'R' || !S.laser.on ? -Math.PI / 2 : 0, w);   // 掌心炮：手腕后翻、掌心朝目标（左手双手连发也一样；左手激光从小臂打，手放平）
       hy = lerp(hy, 0, w);
     }
     // 响指：右臂举到身前上方，拳心朝前
@@ -4686,9 +4707,12 @@ function weapons(dt) {
   // 空中悬停（慢）或往下俯冲时：左右手轮流开炮，左臂也抬起来瞄准
   const twin = S.flying && !S.dark && (Math.hypot(S.vel.x, S.vel.z) < 10 || S.vel.y < -12);
   if (twin && now - S.lastFireR < 0.9 && !S.laser.on) S.aimLUntil = Math.max(S.aimLUntil || 0, now + 0.35);
-  if (S.repWant && S.aimR > 0.8 && S.repCd <= 0 && facingAim()) {
+  // 轮到的那只手够不着准星（在它身后、横过胸口太多）就换另一只；两只都够不着就等身体转过来再打
+  let hand = twin && S.aimL > 0.8 && S.repHand !== 'L' ? 'L' : 'R';
+  if (!armReaches(hand)) hand = hand === 'L' ? 'R' : twin && S.aimL > 0.8 ? 'L' : null;
+  if (S.repWant && S.aimR > 0.8 && S.repCd <= 0 && facingAim() && hand && armReaches(hand)) {
     S.repWant = false;
-    S.repHand = twin && S.aimL > 0.8 && S.repHand !== 'L' ? 'L' : 'R';
+    S.repHand = hand;
     fireRepulsor(S.repHand);
     if (twin) S.repCd *= 0.6;
     if (!S.flying && !S.act) playAct('blast1', { from: 24 / 30, dur: 0.55, mask: 'blast' });
@@ -4764,7 +4788,7 @@ function weapons(dt) {
   // 小臂激光：按住 Q 左臂抬起对准准星，手臂到位才出光；最长连续 2.5 秒，打满冷却 3 秒
   const Z = S.laser;
   Z.cd = Math.max(0, Z.cd - dt);
-  if (key.KeyQ && !S.down && Z.cd <= 0 && Z.t < LASER_MAX && facingAim()) { if (!Z.on && !S.flying && !S.act) playAct('blast2', { from: 26 / 30, dur: 1.4, mask: 'stance' }); Z.on = true; S.aimLUntil = now + 0.4; }
+  if (key.KeyQ && !S.down && Z.cd <= 0 && Z.t < LASER_MAX && facingAim() && armReaches('L')) { if (!Z.on && !S.flying && !S.act) playAct('blast2', { from: 26 / 30, dur: 1.4, mask: 'stance' }); Z.on = true; S.aimLUntil = now + 0.4; }
   else if (Z.on) { Z.on = false; Z.cd = Z.t >= LASER_MAX ? 3 : 0.6; Z.t = 0; }
   const lasing = Z.on && S.aimL > 0.75;
   if (lasing) {
