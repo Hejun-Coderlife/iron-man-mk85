@@ -7693,7 +7693,7 @@ function spawnHammer(near, escort = null) {
   Object.assign(s, { spawnAt: now, alive: true, hp: 8, aw: 1, seenAt: now + 6, dest: null, cur: null, burst: 0, deadT: 0, surrender: 0, flee: 0, panic: 0, descend: { vy: -30 }, escort, escOff: escort ? { a, r } : null });   // seenAt：刚「看见」你，不然落地就降回「?」
   (s.lkp ||= new V3()).copy(S.pos);
   s.mixer.stopAllAction();
-  s.g.position.set(x, terrainH(x, z) + 110, z);
+  s.g.position.set(x, terrainH(x, z) + 100, z);
   s.yaw = Math.atan2(S.pos.x - x, S.pos.z - z);
   s.g.visible = true;
   for (const f of s.jets) f.visible = true;
@@ -7717,20 +7717,21 @@ function hammerEscort(s) {
     s.dest = null;
   } else if (!s.dest && Math.hypot(p.x - hx, p.z - hz) > 6) s.dest = new V3(hx, 0, hz);
 }
-// 汉默无人机空战：起飞后在你身边 18~30 米、比你高 3~8 米处绕圈（不贴地，比地面至少高 6 米），机头一直对着你；
+// 汉默无人机空战：起飞后在你身边 18~30 米、比你高 8~16 米处绕圈（离地 30~100 米），机头一直对着你；
 // 看得见就点射机枪，冷却好了打火箭弹；你飞远了它追上来（最快 26 米/秒）
 function hammerFly(s, dt, show, pc) {
   const p = s.g.position;
   s.orb ??= rnd() * 6.28; s.orbDir ??= rnd() < 0.5 ? -1 : 1; s.orbR ??= 18 + rnd() * 12; s.orbH ??= 8 + rnd() * 8;
   s.orb += s.orbDir * dt * 0.35;
   const want = _e3.set(pc.x + Math.sin(s.orb) * s.orbR, 0, pc.z + Math.cos(s.orb) * s.orbR);
-  want.y = Math.max(pc.y + s.orbH, terrainH(want.x, want.z) + 30) + Math.sin(now * 1.3 + s.orb * 3) * 1.5;   // 至少离地 30 米（用户定的），上下轻轻浮动
+  // 至少离地 30 米、最多离地 100 米（用户定的），上下轻轻浮动；你飞得比这高它就在 100 米处干等
+  want.y = Math.min(Math.max(pc.y + s.orbH, terrainH(want.x, want.z) + 30), terrainH(want.x, want.z) + 100) + Math.sin(now * 1.3 + s.orb * 3) * 1.5;
   s.fv ||= new V3();
   const to = _e2.copy(want).sub(p), dl = to.length();
   s.fv.lerp(to.normalize().multiplyScalar(Math.min(26, dl * 1.2)), damp(2, dt));
   const nx = p.x + s.fv.x * dt, nz = p.z + s.fv.z * dt;
   if (stepClear(s, p, nx, nz)) { p.x = nx; p.z = nz; } else s.orbDir *= -1;
-  p.y = Math.max(terrainH(p.x, p.z), p.y + s.fv.y * dt);
+  p.y = clamp(p.y + s.fv.y * dt, terrainH(p.x, p.z), terrainH(p.x, p.z) + 102);
   s.yaw = lerpAngle(s.yaw, Math.atan2(pc.x - p.x, pc.z - p.z), damp(5, dt));
   s.g.rotation.set(clamp(s.fv.length() / 26, 0, 1) * 0.25, s.yaw, 0);   // 往前飞时身体前倾
   // 脚底喷火
