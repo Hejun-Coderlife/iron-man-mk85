@@ -4935,6 +4935,10 @@ function launchSalvo(hard) {
 // 伤害：坦克 3（两枚一辆）、F-22 4（两枚一架）、斯塔克导弹 3（一枚就拦下）；5 秒没打中自己炸 ----
 const MISSILE_KIND = { lux: 3, tank: 3, heli: 3, jet: 4, smissile: 3, hammer: 4, sam: 4 };   // hammer：汉默无人机兵（8 血，两枚打掉）；sam：防空导弹车（8 血，两枚打掉）
 const MINI_V0 = 60, MINI_ACC = 600, MINI_MAX = 900, MINI_TURN = 8, MINI_FUSE = 9;   // 近炸 9 米（真的空空导弹近炸引信也是十米上下）
+// 按目标用真实导弹的速度（用户定的标准）：[加速度, 最快, 几秒没打中自毁]
+// 地面目标、直升机、别墅跑车＝地狱火 Hellfire 约 1.3 马赫 425 米/秒（约 1 秒加到顶，300 米外约 1 秒到）；
+// F-22＝响尾蛇 AIM-9X 约 900 米/秒；拦斯塔克导弹＝毒刺 Stinger 约 750 米/秒
+const miniSpec = t => t.kind === 'jet' ? [600, 900, 6] : t.kind === 'smissile' ? [600, 750, 6] : [400, 425, 6];
 var minis = minis || [], miniQ = miniQ || [];
 const miniGeo = new THREE.CylinderGeometry(0.06, 0.08, 0.7, 8).rotateX(Math.PI / 2), miniMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, metalness: 0.6, roughness: 0.4 });
 function launchMini(t, side) {
@@ -4942,7 +4946,8 @@ function launchMini(t, side) {
   const p = suit.emit['emit_gun_' + side].getWorldPosition(new V3());
   const m = new THREE.Mesh(miniGeo, miniMat); m.position.copy(p); m.raycast = () => {}; scene.add(m);
   const v = camera.getWorldDirection(new V3()).add(new V3(0, 0.35, 0)).normalize().multiplyScalar(MINI_V0);
-  minis.push({ m, v, t, t0: now });
+  const [acc, max, life] = miniSpec(t);
+  minis.push({ m, v, t, t0: now, acc, max, life });
   sfx.cannon?.(p); flash(p, COL.fire, 200);
 }
 const _mtv = new V3(), _mlead = new V3(), _mseg = new V3();
@@ -4951,7 +4956,7 @@ function updateMinis(dt) {
   for (let i = minis.length - 1; i >= 0; i--) {
     const M = minis[i], p = M.m.position, T = M.t;
     const tp = T.alive ? (T.kind === 'smissile' || T.kind === 'jet' ? T.g.position : T.lockP || _a.copy(T.g.position).setY(T.g.position.y + (T.aimY ?? 1))) : null;
-    const sp = Math.min(MINI_MAX, M.v.length() + MINI_ACC * dt);
+    const sp = Math.min(M.max, M.v.length() + M.acc * dt);
     if (tp) {
       // 提前量：目标速度 × 飞到那儿要的时间（最多 2 秒）
       const tv = T.vel || (T.kind === 'tank' ? _mtv.set(Math.sin(T.g.rotation.y), 0, Math.cos(T.g.rotation.y)).multiplyScalar(T.speed || 0) : _mtv.set(0, 0, 0));
@@ -4977,7 +4982,7 @@ function updateMinis(dt) {
     // 尾焰 + 白烟
     emit(p, _v.copy(M.v).multiplyScalar(-0.05), 0.12, 0.35, 1);
     if (rnd() < 0.8) emitSmoke(p, _v.set((rnd() - 0.5) * 0.4, 0.3, (rnd() - 0.5) * 0.4), 1.6 + rnd(), 0.9);
-    if (hitTarget || wall || now - M.t0 > 5 || p.y < terrainH(p.x, p.z)) {
+    if (hitTarget || wall || now - M.t0 > M.life || p.y < terrainH(p.x, p.z)) {
       explosion(p.clone(), hitTarget ? 1.2 : 0.7); flash(p, COL.fire, 3000); sfx.boom(p, 0.6);
       if (hitTarget) damage(T, MISSILE_KIND[T.role === 'hammer' ? 'hammer' : T.kind] || 2);
       if (!(hitTarget && T.kind === 'lux')) blastHouses(p, 3, 2.5);
@@ -5409,7 +5414,8 @@ function fillTime(dist) {
 function watchers() {
   return [...soldiers.filter(o => o.alive && o.team === 'enemy' && !o.surrender && !o.flee), ...drones.filter(o => o.alive), ...robots.filter(o => o.alive), ...tanks.filter(o => o.alive), ...helis.filter(o => o.alive), ...sams.filter(o => o.alive)];
 }
-function alertOne(e, p) { e.aw = 1; (e.lkp ||= new V3()).copy(p); e.seenAt = now; }
+// 被警报 / 别人喊醒（不是自己看见你）：坦克、防空导弹车要 4~7 秒才开得了火（乘员就位、找到你、装填），以前一拉警报导弹马上就飞过来
+function alertOne(e, p) { if ((e.aw ?? 0) < 1 && (e.kind === 'tank' || e.kind === 'sam')) e.reactAt = Math.max(e.reactAt || 0, now + 4 + rnd() * 3); e.aw = 1; (e.lkp ||= new V3()).copy(p); e.seenAt = now; }
 function shout(e) {
   const p = e.g.position;
   for (const o of watchers()) if (o !== e && o.kind !== 'drone' && (o.aw ?? 0) < 1 && o.g.position.distanceTo(p) < 40) alertOne(o, e.lkp);   // 无人机不听喊，只认自己的灯
@@ -5879,7 +5885,7 @@ function updateTanks(dt) {
       const want = Math.atan2(to.x, to.z) - t.g.rotation.y;
       t.turret.rotation.y = lerpAngle(t.turret.rotation.y, want, damp(3.5, dt));
       t.reload = Math.max(t.los ? -1 : 0.6, t.reload - dt);
-      if (t.los && t.reload <= 0 && Math.abs(angDiff(want, t.turret.rotation.y)) < 0.2) {
+      if (t.los && t.reload <= 0 && now > (t.reactAt || 0) && Math.abs(angDiff(want, t.turret.rotation.y)) < 0.2) {
         // 钢铁侠飞起来了：偶尔发制导导弹（空中最多 3 枚、全场两次至少隔 2.5 秒），平时打高射炮；在地面打炮弹
         let missile = false;
         // 导弹只打悬停 / 慢飞的你（低于 10 米/秒）：一直飞着坦克就只能打高射炮（以前飞着也照发，普通速度甩不掉，太准不合理）
@@ -9319,6 +9325,8 @@ function hitJet(j, amt) {
   if (j.hostile) {
     j.hp -= amt;
     if (j.hp <= 0 && j.alive) { j.alive = false; j.state = 'crash'; jetBoxes(j, false); S.stats.enemyJets = (S.stats.enemyJets || 0) + 1; notice('ENEMY FIGHTER DOWN', '#ffb347', 3000); explosion(j.g.position.clone(), 2.5); }
+    // 敌机被打（停机坪上挨打、或者被打下来）：机场马上知道（飞行员 / 塔台失去联络），全基地警报；附近别的营地也像坦克被炸一样察觉
+    if (!CITY) { tankAlarm(j); const air = camps[OUT_THEME.indexOf('air')]; if (air && !air.alarm) raiseAlarm(air, 'jet'); }
     return;
   }
   if (!j.hitOnce) { j.hitOnce = true; S.stats.friendly = (S.stats.friendly || 0) + 1; }   // 友军误伤按架次算，不按子弹数（肩炮一梭子 12 发）
@@ -10265,16 +10273,18 @@ function updateIntel() {
   if (!S.liberated && villageCamp) {
     const clear = villageCamp.members.every(o => !o.alive || o.surrender || o.flee) && tanks.filter(o => !o.guard && !o.route).every(o => !o.alive) && extremis.filter(e => e.camp === villageCamp).every(e => !e.alive);   // 分到村子的绝境战士也要打掉
     const left = [...villageCamp.members.filter(o => o.alive && !o.surrender && !o.flee), ...tanks.filter(o => !o.guard && !o.route && o.alive), ...extremis.filter(e => e.camp === villageCamp && e.alive)];
-    if (S.libLeft !== undefined && left.length < S.libLeft && left.length) notice(`GULMIRA · ${left.length} LEFT`, '#e8c46a', 2000);
+    // 只在村子附近（700 米内）提示村子还剩几个：人在别的营地时弹「还剩 N」，会以为说的是眼前这个营地
+    const nearV = Math.hypot(HOME.x - S.pos.x, HOME.z - S.pos.z) < 700;
+    if (nearV && S.libLeft !== undefined && left.length < S.libLeft && left.length) notice(`GULMIRA VILLAGE · ${left.length} LEFT`, '#e8c46a', 2000);
     S.libLeft = left.length;
     if (left.length && left.length <= 6) for (const o of left) ping(o.g.position, '#e8c46a', 0.6);   // 最后几个：小地图上标出来，不用满村子找
     // 剩得不多时每 12 秒说清楚还差什么、在哪（坦克可能还在村外往这边开，以前只看见雷达上一个黄点，不知道为什么不解放）
-    if (left.length && left.length <= 6 && now > (S.libHintAt || 0)) {
+    if (nearV && left.length && left.length <= 6 && now > (S.libHintAt || 0)) {
       S.libHintAt = now + 12;
       const name = o => o.kind === 'tank' ? 'TANK' : o.kind === 'extremis' ? 'EXTREMIS' : 'SOLDIER';
       const cnt = {}; for (const o of left) cnt[name(o)] = (cnt[name(o)] || 0) + 1;
       const far = left.reduce((a, o) => o.g.position.distanceTo(S.pos) > a.g.position.distanceTo(S.pos) ? o : a);
-      notice(`GULMIRA · ${left.length} LEFT · ` + Object.entries(cnt).map(([k, v]) => `${k} ${v}`).join(' · ') + ` · FARTHEST ${Math.round(far.g.position.distanceTo(S.pos))} m ${clockOf(far.g.position.x, far.g.position.z)}`, '#e8c46a', 4000);
+      notice(`GULMIRA VILLAGE · ${left.length} LEFT · ` + Object.entries(cnt).map(([k, v]) => `${k} ${v}`).join(' · ') + ` · FARTHEST ${Math.round(far.g.position.distanceTo(S.pos))} m ${clockOf(far.g.position.x, far.g.position.z)}`, '#e8c46a', 4000);
     }
     if (clear) { S.liberated = true; S.libAt = now; S.victoryAt = now + 1; notice('GULMIRA LIBERATED · REPAIR PAD ONLINE · THE VILLAGE IS YOUR BASE NOW', '#7dffb0', 5000); }
     return;
@@ -10431,6 +10441,7 @@ function updateConvoys() {
 S.depotsClearedAt = 1e9;
 const depotLabels = depots.map(() => document.getElementById('dlabels').appendChild(document.createElement('div')));
 function destroyDepot(d) {
+  tankAlarm(d);   // 武器库炸了：附近营地全员警报
   d.alive = false; d.deadAt = now;
   d.warehouse?.traverse(o => { if (o.isMesh) o.material = [].concat(o.material).map(charredOf).reduce((a, b, i, arr) => arr.length === 1 ? b : arr); });
   if (d.crates) d.crates.material = d.crates.userData.home.mat.map(charredOf);
@@ -10772,6 +10783,8 @@ function spawnHeli(h) {
   h.g.visible = true;
 }
 function downHeli(h) {
+  // 直升机被打下来：附近营地察觉；直升机是机场的，机场和敌机一样马上知道（失去联络）
+  if (!CITY) { tankAlarm(h); const air = camps[OUT_THEME.indexOf('air')]; if (air && !air.alarm) raiseAlarm(air, 'heli'); }
   h.alive = false;
   h.parked = false;
   h.falling = true;
@@ -10818,6 +10831,21 @@ function updateHelis(dt) {
         h.body.traverse(o => { if (o.isMesh) { o.userData.orig ??= o.material; o.material = [].concat(o.userData.orig).map(charredOf).reduce((a, b, i, arr) => arr.length === 1 ? b : arr); } });
       }
       continue;
+    }
+    // 撞直升机：钢铁侠以 15 米/秒以上的相对速度撞上机身（离机身中心水平 6 米、上下 3.5 米内）就伤它，越快越狠（60 米/秒以上一下撞下来）；人被弹开
+    if (h.alive && h.g.visible && now > (h.ramAt || 0)) {
+      const dx = pc.x - p.x, dy = pc.y - p.y, dz = pc.z - p.z;
+      if (dx * dx + dz * dz < 36 && Math.abs(dy) < 3.5) {
+        const sp = _e2.copy(S.vel).sub(h.parked ? _e3.set(0, 0, 0) : h.vel).length();
+        if (sp > 15) {
+          h.ramAt = now + 0.6;
+          const at = _p.copy(p).lerp(pc, 0.5).clone();
+          damage(h, sp >= 60 ? 99 : sp / 6);
+          explosion(at, 0.5); flash(at, COL.fire, 1500); sfx.boom(at, 0.5);
+          for (let i = 0; i < 16; i++) emit(at, randDir(_v).multiplyScalar(6 + rnd() * 8), 0.5, 0.08, 2);
+          S.vel.copy(_e3.set(dx, dy, dz).normalize()).multiplyScalar(Math.max(8, sp * 0.35));
+        }
+      }
     }
     if (h.parked) {
       const air = camps[OUT_THEME.indexOf('air')];
@@ -11301,6 +11329,7 @@ if (samProto) {
   }
 }
 function destroySam(m) {
+  tankAlarm(m);   // 防空导弹车炸了：和坦克一样，附近营地马上全员警报
   m.alive = false;
   S.stats.sams++;
   m.respawn = Infinity;   // 炸了就不再刷出来
@@ -11351,7 +11380,7 @@ function updateSams(dt) {
         for (let i = 0; i < 20; i++) emit(from, randDir(_v).multiplyScalar(3), 0.6 + rnd() * 0.4, 1.5, 4);
         flash(from, COL.fire, 300);
       }
-    } else if (aimed && m.reload <= 0) {
+    } else if (aimed && m.reload <= 0 && now > (m.reactAt || 0)) {
       // 全图天上的防空导弹最多 2 枚（以前机场 6 辆车各打各的，像下雨一样拦不过来）：满了就等一会儿再看
       if (atgms.filter(a => a.sam).length >= 1 || atgms.filter(a => !a.lost).length >= 2) m.reload = 1.5 + rnd();
       else if (seesPlayer(m.g.localToWorld(new V3(-3.8, 6.6, 0)), m)) { m.salvo = 1; m.salvoT = 0; m.reload = (30 + rnd() * 10) * waveMul(); notice('SAM LAUNCH', '#ff3b2a'); }
@@ -11818,7 +11847,7 @@ const ZH_SEG = {
   'CONVOY DESTROYED': '车队已摧毁', 'DRONES CLEARED': '无人机已清除', 'DRONES INBOUND': '无人机来袭', 'EMP HIT': '被电磁脉冲击中', 'THRUSTERS OFFLINE': '推进器失灵', 'ENEMY RADIO': '敌方无线电',
   'ARTILLERY INCOMING': '炮击来袭', 'GUNSHIP INBOUND': '武装直升机来袭', 'EXTREMIS ON SUIT': '绝境战士扒在战衣上', 'DODGE (⌥)': '按 ⌥ 闪避', 'ENEMY FIGHTER RETURNING TO BASE': '敌机返航', 'JET LOCKED': '已锁定飞机', 'PRESS T AGAIN TO FIRE': '再按一次 T 发射', 'TANK': '坦克', 'SOLDIER': '士兵', 'EXTREMIS': '绝境战士', 'FARTHEST': '最远', 'UNIBEAM OFFLINE': '胸口光束离线', 'MISSILES OFFLINE': '导弹离线', 'THRUSTER FAILURE': '推进器故障', 'RADIO MAST DOWN': '无线电塔倒了', 'OUTPOST ON FULL ALERT': '营地全面警报', 'EXTREMIS OVERHEATED': '绝境战士过热', 'SELF-DESTRUCT': '自爆', 'OVERHEATING': '过热自爆倒计时', 'DODGE (⌥) TO SHAKE IT OFF': '按 ⌥ 闪避把它甩掉', 'EXTREMIS SOLDIER DOWN': '绝境战士已消灭',
   'EXTREMIS THROWN OFF': '甩掉了绝境战士', 'F-22s DISENGAGING': 'F-22 脱离', 'RETURNING TO BASE': '返航', 'FOX TWO': '敌机发射导弹', 'MISSILE INBOUND': '导弹来袭', 'FLARES (X)': '放干扰弹（X）',
-  'FRIENDLY AIRCRAFT HIT': '误击友军飞机', 'CEASE FIRE': '停火', 'FRIENDLY PILOT KILLED': '友军飞行员死亡', 'GROUND POUND': '重拳砸地', 'GULMIRA LIBERATED': '古尔米拉已解放', 'GULMIRA': '古尔米拉', 'REPAIR PAD ONLINE': '维修台启用',
+  'FRIENDLY AIRCRAFT HIT': '误击友军飞机', 'CEASE FIRE': '停火', 'FRIENDLY PILOT KILLED': '友军飞行员死亡', 'GROUND POUND': '重拳砸地', 'GULMIRA LIBERATED': '古尔米拉已解放', 'GULMIRA': '古尔米拉', 'GULMIRA VILLAGE': '古尔米拉村', 'REPAIR PAD ONLINE': '维修台启用',
   'THE VILLAGE IS YOUR BASE NOW': '村子现在是你的基地', 'GUNSHIP DOWN': '武装直升机已击落', 'HAMMER DRONE DOWN': '汉默无人机已击毁', 'HANGAR DOOR BREACHED': '仓库大门已炸开', 'STARK WEAPONS INSIDE': '里面是斯塔克武器',
   'HIT': '被击中', 'THRUSTERS DOWN': '推进器失灵', 'HOSTILE RADIOING FOR SUPPORT': '敌人正在呼叫支援', 'HOSTILE SURRENDERED': '敌人投降', 'HOLD FIRE': '别开枪', 'IRON MONGER DEFEATED': 'IRON MONGER 已击败',
   'IRON MONGER': 'IRON MONGER', 'JAMMER SIGNAL DETECTED': '发现干扰信号', 'JET DOWN': '战机被击落', 'PILOT EJECTED': '飞行员已弹射', 'MISSION PENALTY': '任务扣分', 'KAMIKAZE DRONES': '自杀式无人机',
