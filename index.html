@@ -42,6 +42,22 @@ canvas{display:block}
 #maps button{width:230px;padding:16px 0;background:rgba(5,20,30,.6);border:1px solid rgba(140,225,255,.45);color:#cfeeff;font:600 14px "SF Mono",Menlo,monospace;letter-spacing:.25em;cursor:pointer}
 #maps button:hover{border-color:#e8c46a;color:#e8c46a}
 #maps button small{display:block;margin-top:6px;font-size:10px;letter-spacing:.15em;opacity:.6}
+#keyBox{display:none;max-width:520px;margin:22px auto 0;padding:18px 22px;background:rgba(5,20,30,.6);border:1px solid rgba(140,225,255,.45);color:#cfeeff;font:13px/1.8 -apple-system,"PingFang SC",sans-serif;text-align:left}
+#keyBox p{margin:0 0 6px}
+#keyBox ol{margin:0 0 12px;padding-left:20px}
+#keyBox a{color:#e8c46a}
+#keyBox input{width:100%;box-sizing:border-box;padding:9px 10px;background:rgba(0,0,0,.4);border:1px solid rgba(140,225,255,.45);color:#fff;font:12px "SF Mono",Menlo,monospace}
+#keyMsg{min-height:1.8em;color:#ff9a8a;font-size:12px}
+#keyBox .btns{display:flex;gap:12px}
+#keyBox button{flex:1;padding:10px 0;background:rgba(5,20,30,.6);border:1px solid rgba(140,225,255,.45);color:#cfeeff;font:600 13px "SF Mono",Menlo,monospace;letter-spacing:.2em;cursor:pointer}
+#keyBox button:hover{border-color:#e8c46a;color:#e8c46a}
+#cityBox{display:none;margin-top:26px}
+#cityBox .cities{display:grid;grid-template-columns:repeat(3,200px);gap:14px}
+#cityBox .btns{display:flex;justify-content:center;gap:14px;margin-top:18px}
+#cityBox button{padding:14px 0;background:rgba(5,20,30,.6);border:1px solid rgba(140,225,255,.45);color:#cfeeff;font:600 14px "SF Mono",Menlo,monospace;letter-spacing:.25em;cursor:pointer}
+#cityBox .btns button{width:140px;padding:9px 0;font-size:12px}
+#cityBox button:hover{border-color:#e8c46a;color:#e8c46a}
+#cityBox button small{display:block;margin-top:5px;font-size:10px;letter-spacing:.1em;opacity:.6}
 #bar{width:260px;height:3px;margin-top:18px;background:rgba(140,225,255,.2)}
 #bar i{display:block;height:100%;width:0;background:#8fe3ff;transition:width .2s}
 #snap{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
@@ -192,11 +208,26 @@ canvas{display:block}
     <button data-map="desert">沙漠<small>解放古尔米拉 · 摧毁十戒帮武器库</small></button>
     <button data-map="nyc">纽约<small>解放曼哈顿 4 个片区 · 帝国大厦 · 中央车站 · 时代广场 · 地铁站</small></button>
   </div>
+  <div id="cityBox">
+    <div class="cities"></div>
+    <div class="btns"><button id="cityKey">换密钥</button><button id="cityBack">返回</button></div>
+  </div>
+  <div id="keyBox">
+    <p>真实城市用的是谷歌航拍三维模型，要一个 Cesium 访问密钥（免费）：</p>
+    <ol>
+      <li>到 <a href="https://ion.cesium.com/signup" target="_blank" rel="noopener">ion.cesium.com</a> 免费注册</li>
+      <li>左边菜单 Access Tokens → 复制 Default 那一串</li>
+      <li>粘贴到下面（只存在你这台设备的浏览器里）</li>
+    </ol>
+    <input id="keyIn" placeholder="粘贴 Cesium 访问密钥" autocomplete="off" spellcheck="false">
+    <p id="keyMsg"></p>
+    <div class="btns"><button id="keyOk">开始</button><button id="keyBack">返回</button></div>
+  </div>
   <div id="bar"><i></i></div>
   <small id="startSub"></small>
 </div>
 
-<script>window.ASSET_SIZES = {"assets/mk85.glb": 3683032, "assets/env.glb": 5358160, "assets/tank.glb": 871028, "assets/robot.glb": 3752580, "assets/boss.glb": 740444, "assets/heli.glb": 1959288, "assets/depot.glb": 2560200, "assets/launcher.glb": 2494448, "assets/f22.glb": 1842332, "assets/ultron.glb": 1632664, "assets/tree.glb": 1300512, "assets/tree_imp.png": 344628, "assets/sam.glb": 1338848, "assets/sky_sunset_4k.jpg": 168168, "assets/sky_sunset_1k.hdr": 831904, "assets/sky_night_4k.jpg": 738591, "assets/sky_night_1k.hdr": 1289706, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651, "assets/sfx.pack": 747155, "assets/city.glb": 8289156, "assets/city_nav.json": 43098, "assets/city_sky_4k.jpg": 323557, "assets/city_sky_1k.hdr": 1392424, "assets/city_masks/brick.png": 10591, "assets/city_masks/brownstone.png": 11352, "assets/city_masks/limestone.png": 12500, "assets/city_masks/stone.png": 11935, "assets/city_masks/stone2.png": 13002, "assets/city_masks/glass.png": 8230, "assets/city_masks/glass2.png": 7395, "assets/city_masks/storefront.png": 4172, "assets/people/civ_0.glb": 194248, "assets/people/civ_1.glb": 309844, "assets/people/civ_2.glb": 300092, "assets/people/civ_3.glb": 141308, "assets/people/civ_4.glb": 346744, "assets/people/civ_5.glb": 138500, "assets/people/civ_6.glb": 262652, "assets/people/civ_7.glb": 255124, "assets/people/civ_8.glb": 245672, "assets/people/civ_9.glb": 283480, "assets/people/anim_walking.glb": 88948, "assets/people/anim_texting_and_walking.glb": 184788, "assets/people/anim_catwalk_walking.glb": 98380, "assets/people/anim_run.glb": 74648, "assets/people/anim_walking_to_dying.glb": 142068, "assets/cars/taxi.glb": 2144008, "assets/cars/alfa4c.glb": 1770792, "assets/cars/alfa33.glb": 2815860, "assets/cars/car_lod.glb": 26432, "assets/landmarks/chrysler.glb": 3470380, "assets/bus.glb": 3872212, "assets/hulkbuster.glb": 765128, "assets/hulk.glb": 6361632, "assets/landmarks/esb.glb": 4343556, "assets/props/container_rust.glb": 3021452, "assets/props/container_open.glb": 1153516, "assets/props/container_top.glb": 2230760, "assets/props/tanker.glb": 1571404, "assets/props/hesco.glb": 1275196, "assets/props/watch_tower.glb": 1395588, "assets/props/tent.glb": 1096820, "assets/props/warehouse.glb": 2834716, "assets/weapons/hk416.glb": 1109460, "assets/people/sol_0.glb": 239232, "assets/people/sol_1.glb": 285024, "assets/people/sol_2.glb": 949396, "assets/people/swat.glb": 267120, "assets/people/hammer.glb": 1442280, "assets/people/extremis.glb": 3246916, "assets/weapons/rpg7.glb": 995972, "assets/people/anim_rifle_idle.glb": 159552, "assets/people/anim_rifle_aiming_idle.glb": 140320, "assets/people/anim_rifle_run.glb": 78360, "assets/people/anim_firing_rifle.glb": 73724, "assets/people/anim_rifle_run_to_dying.glb": 168312, "assets/people/anim_grenade_throw.glb": 137684, "assets/people/anim_kneel_down.glb": 126048, "assets/people/anim_surrender.glb": 66948};</script>
+<script>window.ASSET_SIZES = {"assets/mk85.glb": 3683032, "assets/env.glb": 5358160, "assets/tank.glb": 871028, "assets/robot.glb": 3752580, "assets/boss.glb": 740444, "assets/heli.glb": 1959288, "assets/depot.glb": 2560200, "assets/launcher.glb": 2494448, "assets/f22.glb": 1842332, "assets/ultron.glb": 1632664, "assets/tree.glb": 1300512, "assets/tree_imp.png": 344628, "assets/sam.glb": 1338848, "assets/sky_sunset_4k.jpg": 168168, "assets/sky_sunset_1k.hdr": 831904, "assets/sky_night_4k.jpg": 738591, "assets/sky_night_1k.hdr": 1289706, "assets/sky_4k.jpg": 1042457, "assets/sky_1k.hdr": 1402651, "assets/sfx.pack": 747155, "assets/city.glb": 8301076, "assets/city_nav.json": 43098, "assets/city_sky_4k.jpg": 323557, "assets/city_sky_1k.hdr": 1392424, "assets/city_masks/brick.png": 10591, "assets/city_masks/brownstone.png": 11352, "assets/city_masks/limestone.png": 12500, "assets/city_masks/stone.png": 11935, "assets/city_masks/stone2.png": 13002, "assets/city_masks/glass.png": 8230, "assets/city_masks/glass2.png": 7395, "assets/city_masks/storefront.png": 4172, "assets/people/civ_0.glb": 194248, "assets/people/civ_1.glb": 309844, "assets/people/civ_2.glb": 300092, "assets/people/civ_3.glb": 141308, "assets/people/civ_4.glb": 346744, "assets/people/civ_5.glb": 138500, "assets/people/civ_6.glb": 262652, "assets/people/civ_7.glb": 255124, "assets/people/civ_8.glb": 245672, "assets/people/civ_9.glb": 283480, "assets/people/anim_walking.glb": 88948, "assets/people/anim_texting_and_walking.glb": 184788, "assets/people/anim_catwalk_walking.glb": 98380, "assets/people/anim_run.glb": 74648, "assets/people/anim_walking_to_dying.glb": 142068, "assets/cars/taxi.glb": 2144008, "assets/cars/alfa4c.glb": 1770792, "assets/cars/alfa33.glb": 2815860, "assets/cars/car_lod.glb": 26432, "assets/landmarks/chrysler.glb": 3470380, "assets/bus.glb": 3872212, "assets/hulkbuster.glb": 765128, "assets/hulk.glb": 6361632, "assets/landmarks/esb.glb": 4343556, "assets/props/container_rust.glb": 3021452, "assets/props/container_open.glb": 1153516, "assets/props/container_top.glb": 2230760, "assets/props/tanker.glb": 1571404, "assets/props/hesco.glb": 1275196, "assets/props/watch_tower.glb": 1395588, "assets/props/tent.glb": 1096820, "assets/props/warehouse.glb": 2834716, "assets/weapons/hk416.glb": 1109460, "assets/people/sol_0.glb": 239232, "assets/people/sol_1.glb": 285024, "assets/people/sol_2.glb": 949396, "assets/people/swat.glb": 267120, "assets/people/hammer.glb": 1442280, "assets/people/extremis.glb": 3246916, "assets/weapons/rpg7.glb": 995972, "assets/people/anim_rifle_idle.glb": 159552, "assets/people/anim_rifle_aiming_idle.glb": 140320, "assets/people/anim_rifle_run.glb": 78360, "assets/people/anim_firing_rifle.glb": 73724, "assets/people/anim_rifle_run_to_dying.glb": 168312, "assets/people/anim_grenade_throw.glb": 137684, "assets/people/anim_kneel_down.glb": 126048, "assets/people/anim_surrender.glb": 66948};</script>
 <script type="importmap">
 {"imports":{
   "three":"./vendor/three/build/three.module.js",
@@ -273,24 +304,87 @@ const _a = new V3(), _b = new V3(), _d = new V3(), _p = new V3(), _v = new V3(),
 
 /* ================= 选地图 ================= */
 // 地址带 ?map=desert / ?map=nyc 就跳过选择（录演示用 window.FORCE_MAP）
+// 真实城市（谷歌航拍三维模型）：每个城市一个原点（经纬度）+ 开场面朝的地标；h = 原点地面的椭球高度 + 20，让地面大约落在 y = -20（和纽约一样，各城市实测调过）
+// 真实城市模式已取消（2026-10-28 用户要求）：菜单入口拿掉、发布版不带 3d-tiles 库和路网；代码先留着，REAL_ON 改成 true 并加回菜单按钮就能恢复
+const REAL_ON = false;
+const REAL_CITIES = {
+  realnyc:    { name: '纽约', sub: '帝国大厦 · 中央公园', lat: 40.7549, lon: -73.984, h: 0, look: [40.7484, -73.9857] },
+  realparis:  { name: '巴黎', sub: '埃菲尔铁塔 · 塞纳河', lat: 48.8622, lon: 2.2885, h: 125, look: [48.8584, 2.2945] },
+  realtokyo:  { name: '东京', sub: '东京塔 · 芝公园', lat: 35.6540, lon: 139.7500, h: 60, look: [35.6586, 139.7454] },
+  realrome:   { name: '罗马', sub: '斗兽场 · 古罗马广场', lat: 41.8935, lon: 12.4870, h: 88, look: [41.8902, 12.4922] },
+  realosaka:  { name: '大阪', sub: '大阪城 · 天守阁', lat: 34.6830, lon: 135.5200, h: 77, look: [34.6873, 135.5259] },
+  realvenice: { name: '威尼斯', sub: '圣马可广场 · 大运河 · 没有坦克', lat: 45.4310, lon: 12.3350, h: 66, look: [45.4340, 12.3388] },
+};
+// 真实城市的 Cesium 密钥：本机开发时读 cesium-token.js（不进仓库），网站上由玩家自己粘贴、存在他自己浏览器里 —— 发布版里不带任何人的密钥
+const cesiumKey = () => window.CESIUM_TOKEN || localStorage.getItem('cesiumToken') || '';
+// 先问一下 Cesium 这个密钥能不能打开谷歌三维模型（资产 2275207）；这一步不算谷歌模型的用量
+async function checkCesiumKey(k) {
+  try {
+    const r = await fetch('https://api.cesium.com/v1/assets/2275207/endpoint?access_token=' + encodeURIComponent(k));
+    return r.ok ? '' : r.status === 401 ? '密钥不对：请复制 Access Tokens 里完整的那一串' : '这个密钥打不开谷歌三维模型（错误 ' + r.status + '）';
+  } catch (e) { return '连不上 Cesium（可能需要开代理）'; }
+}
 const MAP = await new Promise(res => {
   const q = window.FORCE_MAP || new URLSearchParams(location.search).get('map');
-  if (q === 'desert' || q === 'nyc') return res(q);
-  const box = document.getElementById('maps');
-  document.getElementById('bar').style.visibility = 'hidden';
-  document.getElementById('startMsg').textContent = '选择战场';
-  box.style.display = 'flex';
+  const box = document.getElementById('maps'), keyBox = document.getElementById('keyBox'), cityBox = document.getElementById('cityBox'), msg = document.getElementById('startMsg');
+  // 填密钥时先藏起右边的按键说明（会盖住面板），离开面板再放回来
+  const help = document.getElementById('help'), showHelp = on => { if (help) help.style.visibility = on ? '' : 'hidden'; };
+  const go = m => { showHelp(true); box.style.display = keyBox.style.display = cityBox.style.display = 'none'; document.getElementById('bar').style.visibility = ''; msg.textContent = '载入中…'; res(m); };
+  const menu = () => { showHelp(true); keyBox.style.display = cityBox.style.display = 'none'; box.style.display = 'flex'; document.getElementById('bar').style.visibility = 'hidden'; msg.textContent = '选择战场'; };
+  // 没有密钥时：先弹密钥面板，填对了才进真实城市
+  const askKey = () => {
+    showHelp(false); box.style.display = cityBox.style.display = 'none'; keyBox.style.display = 'block'; document.getElementById('bar').style.visibility = 'hidden'; msg.textContent = '真实城市';
+    const inp = document.getElementById('keyIn'), km = document.getElementById('keyMsg');
+    km.textContent = localStorage.getItem('cesiumTokenBad') ? '之前存的密钥用不了了，请重新粘贴' : '';
+    inp.value = '';
+    inp.focus();
+  };
+  document.getElementById('keyOk').onclick = async e => {
+    e.stopPropagation();
+    const k = document.getElementById('keyIn').value.trim(), km = document.getElementById('keyMsg');
+    if (!k) { km.textContent = '先粘贴密钥'; return; }
+    km.textContent = '检查中…';
+    const err = await checkCesiumKey(k);
+    if (err) { km.textContent = err; return; }
+    localStorage.setItem('cesiumToken', k); localStorage.removeItem('cesiumTokenBad');
+    wantCity ? go(wantCity) : cities();
+  };
+  document.getElementById('keyIn').onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') document.getElementById('keyOk').click(); };
+  document.getElementById('keyBack').onclick = e => { e.stopPropagation(); menu(); };
+  // 城市列表
+  let wantCity = null;
+  const cities = () => { showHelp(false); box.style.display = keyBox.style.display = 'none'; cityBox.style.display = 'block'; document.getElementById('bar').style.visibility = 'hidden'; msg.textContent = '真实城市 · 坦克沿真实街道开过来（威尼斯没有车道，只能飞）'; };
+  const list = cityBox.querySelector('.cities');
+  for (const [id, c] of Object.entries(REAL_CITIES)) {
+    const b = list.appendChild(document.createElement('button'));
+    b.innerHTML = `${c.name}<small>${c.sub}</small>`;
+    b.onclick = e => { e.stopPropagation(); go(id); };
+  }
+  document.getElementById('cityBack').onclick = e => { e.stopPropagation(); menu(); };
+  // 本机用 cesium-token.js 时不用换；网站上可以换成别的密钥
+  document.getElementById('cityKey').style.display = window.CESIUM_TOKEN ? 'none' : '';
+  document.getElementById('cityKey').onclick = e => { e.stopPropagation(); wantCity = null; askKey(); };
+  cityBox.addEventListener('click', e => e.stopPropagation());
+  keyBox.addEventListener('click', e => e.stopPropagation());
+  const needKey = () => !cesiumKey() || localStorage.getItem('cesiumTokenBad');
+  const pick = m => {
+    if (m === 'real') { wantCity = null; return needKey() ? askKey() : cities(); }
+    if (REAL_CITIES[m]) { wantCity = m; return needKey() ? askKey() : go(m); }
+    go(m);
+  };
+  if (q === 'desert' || q === 'nyc' || (REAL_ON && REAL_CITIES[q])) return pick(q);
+  menu();
   box.addEventListener('click', e => {
     const b = e.target.closest('button');
     if (!b) return;
     e.stopPropagation();
-    box.style.display = 'none';
-    document.getElementById('bar').style.visibility = '';
-    document.getElementById('startMsg').textContent = '载入中…';
-    res(b.dataset.map);
+    pick(b.dataset.map);
   });
 });
-const CITY = MAP === 'nyc';
+// 真实城市（试验）：城市换成谷歌航拍三维模型（Cesium ion 免费账号加载，密钥见上面 cesiumKey）；敌人只有坦克（沿 OSM 真实路网开，见 RNAV）
+const REAL = !!REAL_CITIES[MAP], RC = REAL_CITIES[MAP];
+const NB = false, CITY = MAP === 'nyc' || REAL;
+const CITY_DIR = 'assets/';
 // 体型倍数：镜头、碰撞按战衣身高放大（Mark 85 约 1.95 米；纽约遇到浩克时换上的反浩克机甲约 3.3 米 → 1.7），换战衣时由 wearSuit 改
 let SK = 1;
 // 本地双击（file://）：选好地图后再读那张地图的 base64 数据，另一张不读
@@ -315,7 +409,7 @@ const ASSETS = {
   heli: ['HELI_GLB_B64', 'assets/heli.glb'],
   sam: ['SAM_GLB_B64', 'assets/sam.glb'],
   ...(CITY ? {
-    city: ['CITY_GLB_B64', 'assets/city.glb'],
+    city: ['CITY_GLB_B64', CITY_DIR + 'city.glb'],
     ultron: ['ULTRON_GLB_B64', 'assets/ultron.glb'],
     // 浩克：Sketchfab「Hulk (Brand New Day) - Marvel Future Fight」（kabiidev，CC BY），自带 19 个动作；遇到他时换上的反浩克机甲
     hulk: ['HULK_GLB_B64', 'assets/hulk.glb'],
@@ -323,13 +417,13 @@ const ASSETS = {
     // 行道树：Sketchfab「Realistic Tree」（Daniel，CC BY；tools/process_tree.py）+ 远景用的树图
     tree: ['TREE_GLB_B64', 'assets/tree.glb'],
     treeImp: ['TREE_IMP_B64', 'assets/tree_imp.png'],
-    nav: ['CITY_NAV_B64', 'assets/city_nav.json'],
+    nav: ['CITY_NAV_B64', CITY_DIR + 'city_nav.json'],
     sky: ['CITY_SKY_JPG_B64', 'assets/city_sky_4k.jpg'],
     hdr: ['CITY_SKY_HDR_B64', 'assets/city_sky_1k.hdr'],
     // 纽约也有黄昏（和沙漠同一张天空，全景下半截是镜像天空，没有地面，城里也能用）；夜景试过不好看，不要
     skyDusk: ['SKY_DUSK_JPG_B64', 'assets/sky_sunset_4k.jpg'],
     hdrDusk: ['SKY_DUSK_HDR_B64', 'assets/sky_sunset_1k.hdr'],
-    ...Object.fromEntries(FACADES.map(k => ['mask_' + k, [`CITY_MASK_${k.toUpperCase()}_B64`, `assets/city_masks/${k}.png`]])),
+    ...Object.fromEntries(FACADES.map(k => ['mask_' + k, [`CITY_MASK_${k.toUpperCase()}_B64`, `${CITY_DIR}city_masks/${k}.png`]])),
     // 街上的真人行人、走路动作、真车（tools/process_people.py、tools/process_car.py 转的）
     ...Object.fromEntries([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(i => ['civ' + i, [`CIV_${i}_B64`, `assets/people/civ_${i}.glb`]])),
     ...Object.fromEntries(['walking', 'texting_and_walking', 'catwalk_walking', 'run', 'walking_to_dying'].map(k => ['anim_' + k, [`ANIM_${k.toUpperCase()}_B64`, `assets/people/anim_${k}.glb`]])),
@@ -442,10 +536,10 @@ const scene = new THREE.Scene();
 // 远处渐隐到和全景照片地平线相近的颜色；纽约的雾霾更蓝灰，也用来藏住城市边缘
 // 沙漠的雾从 110 米就开始：村子另一头的房子已经蒙上一层薄沙尘，有空气感
 // 纽约的城市霾：蓝灰色、不要太亮（太亮远处的楼会像一片白纸板），从 220 米开始一层层淡出
-scene.fog = CITY ? new THREE.Fog(0x9aa3ad, 220, 2600) : new THREE.Fog(0xb49f84, 110, 3400);   // 远处到 3.4 公里才完全没入沙尘，外圈地形边缘藏在雾里
+scene.fog = REAL ? new THREE.Fog(0x9aa3ad, 900, 5000) : CITY ? new THREE.Fog(0x9aa3ad, 220, 2600) : new THREE.Fog(0xb49f84, 110, 3400);   // 远处到 3.4 公里才完全没入沙尘，外圈地形边缘藏在雾里
 // 沙漠可活动范围扩到约 8 公里（外圈地形到 ±4.5 公里），远裁剪面跟着拉远
 const OUTER_R = 4500, PLAY_R = 3800;
-const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, CITY ? 2600 : 12000);   // 沙漠：地图对角另一头的山在 10 公里外
+const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, REAL ? 6000 : CITY ? 2600 : 12000);   // 沙漠：地图对角另一头的山在 10 公里外
 
 const pmrem = new THREE.PMREMGenerator(renderer);
 
@@ -632,6 +726,7 @@ if (CAVE) { CAVE.y = terrainH0(CAVE.x, CAVE.z); CAVE.entrance = Math.atan2(CAVE.
 // 和公式差好几米（全图平均 3 米、最多 28 米），人在沙丘谷底会陷进沙里、在脊上会悬空
 var TG = null;
 function terrainH(x, z) {
+  if (REAL) return -80;   // 真实纽约：地面就是谷歌模型本身（射线落脚），没有平地兜底
   if (CITY) return SUB ? subRampH(x, z) : 0;   // 纽约是平地，楼顶、停机坪靠射线落脚；地铁站的斜坡口是个往下的坑
   if (TG) { const h = gridH(x, z); if (h !== null) return h; }
   return terrainF(x, z);
@@ -739,7 +834,7 @@ const envBuf = CITY ? null : await assetBuf.env;
 // 纽约：OpenStreetMap 真实曼哈顿中城（tools/build_city_osm.py 生成），一块 400 米见方合成一个物体
 // 楼很多、面很多，射线检测用 three-mesh-bvh 加速（每个物体先建一棵包围盒树）
 let NAV = null, PAD = null, HOME = new V3();
-const cityBuf = CITY ? await assetBuf.city : null;
+const cityBuf = CITY && !REAL ? await assetBuf.city : null;
 if (cityBuf) {
   startMsgEl.textContent = '正在搭建城市…';
   const city = (await gltfLoader().parseAsync(cityBuf, '')).scene;
@@ -779,7 +874,7 @@ if (cityBuf) {
   if (navBuf) {
     const data = JSON.parse(new TextDecoder().decode(navBuf));
     NAV = buildNav(data.roads);
-    PAD = new V3(data.pad[0], data.pad[1], data.pad[2]);
+    PAD = data.pad ? new V3(data.pad[0], data.pad[1], data.pad[2]) : null;   // 宁波没有地标塔停机坪（奥创改在别处出场）
     // 出生点：离地图中心最近的路口
     let best = Infinity;
     for (const n of NAV) { const d = Math.hypot(n.x, n.z); if (n.nb.length > 2 && d < best) { best = d; HOME.set(n.x, 0, n.z); } }
@@ -788,6 +883,112 @@ if (cityBuf) {
     await setupTrees();
     await setupStreetLife();
     await setupLandmarks(city);
+  }
+}
+// ---- 真实城市：谷歌航拍三维模型（3d-tiles-renderer 库 + Cesium ion 的 Google Photorealistic 3D Tiles，资产编号 2275207）----
+// 把这座城市的原点（REAL_CITIES 里的经纬度）放到坐标原点、地面朝上；模型边飞边按距离加载。每块模型加载进来就登记成碰撞物（挡人、能落脚），卸载时去掉
+var realTiles = null;
+// 精细度按 CSS 像素算（不乘视网膜屏的 2 倍，否则要的模型多 4 倍、内存装不下反而一直停在粗模型）
+const REAL_ERR = 14;
+// 真实纽约：模型是边飞边下载的，脚下的地面还没载到时人会一路掉下去穿过去 → 脚下没有地面就悬停在原处；
+// 万一已经掉到地面以下（头顶 150 米内有模型挡着），直接挪回地面上
+const _rkRay = new THREE.Raycaster(), _rkO = new V3();
+function realGroundBelow(x, y, z) {
+  _rkRay.set(_rkO.set(x, y + 300, z), DOWN); _rkRay.far = 700;
+  const h = _rkRay.intersectObjects(rayMeshes.filter(o => o.userData.realTile && o.userData.ws && Math.hypot(o.userData.ws.center.x - x, o.userData.ws.center.z - z) < o.userData.ws.radius + 5), false);
+  return h.length ? h[h.length - 1].point.y : null;   // 最下面那一下 = 地面
+}
+// 真实城市的路网（tools/fetch_real_roads.py 下载的 OSM 机动车道，坐标已换成游戏坐标）：坦克沿真实街道开。
+// 单独一个变量，不用 NAV：好多纽约的东西（街口摄像头、行人……）看见 NAV 就会按生成纽约的街道摆出来。威尼斯老城没有车道 → 没坦克
+var RNAV = null;
+if (REAL) {
+  try { const r = await fetch(CITY_DIR + 'real_roads/' + MAP + '.json'); if (r.ok) { const d = await r.json(); if (d.roads.length > 50) RNAV = buildNav(d.roads); } } catch (e) {}
+}
+// 某一点的路面高度：从 yHint 上方 4 米往下打第一下（头顶的树冠、高架不算）；没给 yHint 就从高处打、取最低那一下
+function realRoadY(x, z, yHint) {
+  if (yHint == null) return realGroundBelow(x, 300, z);
+  _rkRay.set(_rkO.set(x, yHint + 4, z), DOWN); _rkRay.far = 14;
+  const h = _rkRay.intersectObjects(rayMeshes.filter(o => o.userData.realTile && o.userData.ws && Math.hypot(o.userData.ws.center.x - x, o.userData.ws.center.z - z) < o.userData.ws.radius + 5), false)[0];
+  return h ? h.point.y : null;
+}
+// 坦克贴着路面开：每 0.1 秒量一次脚下；往上最多认 1 米（停着的车顶、路边台子不算路面），往下不限（下坡）
+function realTankY(t, dt) {
+  const p = t.g.position;
+  if (now >= (t.gyAt || 0)) {
+    t.gyAt = now + 0.1;
+    const y = realRoadY(p.x, p.z, p.y);
+    if (y !== null && y < p.y + 1) t.gy = y;
+  }
+  if (t.gy != null) p.y += (t.gy - p.y) * Math.min(1, dt * 12);
+}
+function realKeepAbove() {
+  if (now < (realKeepAbove.next || 0)) return;
+  realKeepAbove.next = now + 0.2;
+  const g = realGroundBelow(S.pos.x, S.pos.y, S.pos.z);
+  realKeepAbove.g = g;   // 顺便给界面的「高度」用
+  if (g === null) { if (S.flying || S.dropIn) { S.vel.y = Math.max(S.vel.y, 0); if (S.dropIn) S.pos.y = Math.max(S.pos.y, 120); } else { S.flying = true; S.vel.set(0, 0, 0); } return; }
+  if (S.pos.y < g - 0.5) { S.pos.y = g + 1; S.vel.y = Math.max(S.vel.y, 0); }
+}
+if (REAL) {
+  const err = cesiumKey() ? await checkCesiumKey(cesiumKey()) : '没有 Cesium 密钥';
+  if (err) {
+    // 密钥失效（被删、过期）：记下来，回到选地图页时重新弹密钥面板；本机 cesium-token.js 的不动
+    if (!window.CESIUM_TOKEN && err.startsWith('密钥')) localStorage.setItem('cesiumTokenBad', '1');
+    startMsgEl.textContent = '真实城市加载不了：' + err;
+  } else {
+    const { TilesRenderer } = await import('3d-tiles-renderer/index.three.js');
+    const { CesiumIonAuthPlugin, GLTFExtensionsPlugin, ReorientationPlugin, TileCompressionPlugin } = await import('3d-tiles-renderer/index.three-plugins.js');
+    const draco = new DRACOLoader(); draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    const tiles = new TilesRenderer();
+    tiles.registerPlugin(new CesiumIonAuthPlugin({ apiToken: cesiumKey(), assetId: '2275207', autoRefreshToken: true }));
+    tiles.registerPlugin(new GLTFExtensionsPlugin({ dracoLoader: draco }));
+    tiles.registerPlugin(new TileCompressionPlugin());
+    tiles.registerPlugin(new ReorientationPlugin({ lat: RC.lat * Math.PI / 180, lon: RC.lon * Math.PI / 180, height: RC.h, up: '+y', recenter: true }));
+    // 模型精细度（越小越清楚、越费）。谷歌插件载入后会偷偷改成 20（很糊），所以每帧在 update 前重新设一次
+    tiles.errorTarget = REAL_ERR;
+    tiles.setCamera(camera);
+    // 碰撞用的第二台镜头：在你头顶 350 米往正下方看（不出画面）。模型库只加载镜头看得见的部分，只有主镜头时你身后、脚下根本没有模型，
+    // 落不了地、坦克找不到路面；加这台后你周围约 400 米一圈都会载进来（比主镜头粗一点，够碰撞用）
+    const colCam = new THREE.PerspectiveCamera(100, 1, 1, 4000);
+    colCam.up.set(0, 0, -1);
+    tiles.setCamera(colCam); tiles.setResolution(colCam, 384, 384);
+    tiles.colCam = colCam;
+    tiles.setResolution(camera, innerWidth, innerHeight);
+    // 模型缓存上限：默认约 430 MB，装满了就不再载更精细的版本（画面一直糊）
+    tiles.lruCache.maxBytesSize = 700 * 2 ** 20;
+    // 新加载的模型：这时还没挂到 tiles.group 下（世界坐标不对），先记下来，下一帧挂好了再算包围球、登记碰撞
+    const pending = [], all = new Set();
+    tiles.addEventListener('load-model', ({ scene: sc, tile }) => { sc.traverse(o => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = false; o.userData.realTile = true; o.userData.gErr = tile?.geometricError ?? 0; pending.push(o); } }); });
+    tiles.addEventListener('tiles-load-end', () => {});
+    tiles.registerTileMeshes = () => {
+      tiles.group.updateMatrixWorld();
+      for (let i = pending.length - 1; i >= 0; i--) {
+        const o = pending[i];
+        // 这块模型要挂到 tiles.group 下面（城市的坐标系）才算得出真实位置；以前只看上两层，有的模型多套了一层，
+        // 没挂上就登记了，包围球算成地心坐标（x 四百多万米），这些楼等于没有碰撞
+        let r = o; while (r.parent && r.parent !== tiles.group) r = r.parent;
+        if (r.parent !== tiles.group) continue;   // 还没挂上
+        pending.splice(i, 1);
+        r.updateMatrixWorld(true);
+        o.geometry.computeBoundingSphere();
+        o.userData.ws = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
+        o.userData.tileRoot = r;
+        all.add(o);
+      }
+      // 只有正在显示的模型才算碰撞：换成精细版后，粗糙版只是从画面里拿掉、还留在内存里，不剔掉就成了空中的隐形墙
+      const shown = new Set(tiles.group.children);
+      const strip = L => { for (let i = L.length - 1; i >= 0; i--) if (L[i].userData.realTile) L.splice(i, 1); };
+      strip(rayMeshes); strip(camBlockers);
+      // 太粗的模型（误差 40 米以上：刚载入时的大轮廓、远处）只显示不算碰撞，不然人会被一块高度不准的粗模型抬到几百米高
+      for (const o of all) if (o.userData.gErr <= 40 && shown.has(o.userData.tileRoot)) { rayMeshes.push(o); camBlockers.push(o); }
+    };
+    tiles.addEventListener('dispose-model', ({ scene: sc }) => {
+      const gone = new Set(); sc.traverse(o => { if (o.isMesh) gone.add(o); });
+      for (const L of [rayMeshes, camBlockers, pending]) for (let i = L.length - 1; i >= 0; i--) if (gone.has(L[i])) L.splice(i, 1);
+      for (const o of gone) all.delete(o);
+    });
+    scene.add(tiles.group);
+    realTiles = tiles;
   }
 }
 // ---- 纽约行道树：近处（100 米内最近的 40 棵）用真树模型，远处用这棵树渲染出来的图贴在十字面片上（每棵 4 个面）；每半秒按你的位置换一次 ----
@@ -1832,6 +2033,7 @@ async function setupLandmarks(city) {
   LANDMARKS ||= {};
   // base：扫描模型底部对应的真实高度（裁剪时贴地的部分被当碎块去掉了）；城市方块楼这个高度以下保留当楼座，以上删掉
   // gain：扫描贴图的亮度补偿（帝国大厦的扫描整体偏暗，外墙其实是浅灰石灰岩）
+  if (NB) return;   // 克莱斯勒、帝国大厦只在纽约
   const LMS = [{ key: 'lm_chrysler', x: 464, z: 376, base: 29.1, half: 34, gain: 1.1 }, { key: 'lm_esb', x: -396, z: 730, base: 8.7, half: 40, gain: 2.1 }];
   const ray = new THREE.Raycaster(), DOWN_V = new V3(0, -1, 0);
   const roofAt = (x, z) => { ray.set(_a.set(x, 700, z), DOWN_V); const h = ray.intersectObjects(nearBlockers(_b.set(x, 0, z), 2), false)[0]; return h ? h.point.y : 0; };
@@ -2490,7 +2692,7 @@ if (envBuf) {
     o.userData.ws = o.geometry.boundingSphere.clone().applyMatrix4(o.matrixWorld);
   }
   dressVillage(env);
-} else if (!cityBuf) {
+} else if (!cityBuf && !REAL) {
   ground = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000), new THREE.MeshStandardMaterial({ color: 0xc4a06c, roughness: 0.95 }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -4084,9 +4286,13 @@ function physics(dt) {
   S.kx += ((kt >= 0 ? -1.2 * Math.min(1, kt * 3) + Math.sin(kt * 8) * 0.3 : 0) - S.kx) * damp(kt >= 0 ? 10 : 6, dt);
   S.kz += ((kt >= 0 ? S.kSpin * (0.8 * Math.sin(kt * 5) + 0.3) : 0) - S.kz) * damp(kt >= 0 ? 10 : 6, dt);
   // 纽约只有中城一块有真实楼（外圈是远景楼），不让飞出去
-  if (CITY) {
+  if (REAL) {
+    // 真实城市：谷歌模型全世界都有，边界只防飞太远（±12 公里；纽约：南到炮台公园、北过中央公园到哈莱姆）
+    S.pos.x = clamp(S.pos.x, -12000, 12000);
+    S.pos.z = clamp(S.pos.z, -12000, 12000);
+  } else if (CITY) {
     S.pos.x = clamp(S.pos.x, -950, 950);
-    S.pos.z = clamp(S.pos.z, -800, 800);
+    S.pos.z = NB ? clamp(S.pos.z, -950, 950) : clamp(S.pos.z, -800, 800);
   } else {
     // 沙漠：作战区半径 3.8 公里。飞出去先提示，越往外推回来的力越大，4.3 公里处硬挡住
     const r = Math.hypot(S.pos.x, S.pos.z);
@@ -4381,6 +4587,15 @@ function hoverIntro() {
 function dropIn() {
   if (!S.hoverIntro) hoverIntro();
   S.hoverIntro = false;
+  // 真实纽约：开场时脚下只载到粗模型，落地会踩进地面里 → 改成直接在楼顶上空悬停，起飞状态开局
+  if (REAL) {
+    S.pos.y = Math.max(S.pos.y, 160); S.vel.set(0, 0, 0); S.flying = true; S.dropIn = false;
+    // 面朝这座城市的地标。ReorientationPlugin 摆出来的坐标：x 往西、z 往北（实测埃菲尔铁塔的位置确认过），单位米
+    const dx = -(RC.look[1] - RC.lon) * 111320 * Math.cos(RC.lat * Math.PI / 180), dz = (RC.look[0] - RC.lat) * 110540;
+    // 只转镜头和身体，别设 faceYaw（那是「固定朝这个方向开火」，设了不清掉，之后按 R、开枪全往地标方向打）
+    camYaw = S.yaw = Math.atan2(dx, dz); camPitch = -0.12;
+    return;
+  }
   S.vel.set(0, -15, 0);
   S.dropIn = true;
 }
@@ -5932,6 +6147,11 @@ function wreckTank(t) {
 function respawnTank(t) {
   if (t.spent) { t.respawn = 1e9; return; }
   if (t.route) { t.respawn = 1e9; return; }   // 车队：整支打掉后由 updateConvoys 一起重开
+  // 真实城市：名额用完不再来；离你 120~260 米的路口没有放得下的（模型还没载到）就过 2 秒再找
+  if (REAL) {
+    if (!RNAV || (!t.alive && !cityTake('tank'))) { t.respawn = 1e9; t.spent = true; return; }
+    if (!placeOnRealRoad(t, 120, 260)) { cityLeft.tank++; t.respawn = now + 2; return; }
+  } else
   // 守卫：目标还在就回家门口重生，目标没了就不再出现（纽约、沙漠打掉都不补，spent 在上面已经挡掉）
   if (t.guard) {
     if (!t.guard.alive) { t.respawn = 1e9; return; }
@@ -5969,11 +6189,39 @@ function respawnTank(t) {
   Object.assign(t, { alive: true, wreck: false, hp: TANK_HP, reload: 3 + rnd() * 3, speed: 0 });
   t.g.visible = true;
 }
+// 真实城市：在离钢铁侠 r0~r1 米的真实路口出车；那里的模型还没载到（量不到路面）就换一个路口，都不行返回 false
+function placeOnRealRoad(t, r0, r1) {
+  for (let k = 0; k < 400; k++) {
+    const i = Math.floor(rnd() * RNAV.length), n = RNAV[i];
+    if (!n.nb.length) continue;
+    const d = Math.hypot(n.x - S.pos.x, n.z - S.pos.z);
+    if (d < r0 || d > r1) continue;
+    if (tanks.some(o => o !== t && (o.alive || o.wreck) && Math.hypot(o.g.position.x - n.x, o.g.position.z - n.z) < 15)) continue;
+    const y = realRoadY(n.x, n.z);
+    if (y === null) continue;
+    const next = n.nb[Math.floor(rnd() * n.nb.length)], yaw = Math.atan2(RNAV[next].x - n.x, RNAV[next].z - n.z);
+    if (tankHullBlocked(n.x, n.z, yaw, y)) continue;
+    t.g.position.set(n.x, y, n.z); t.g.rotation.y = yaw; t.gy = y;
+    Object.assign(t, { node: next, prev: i });
+    return true;
+  }
+  return false;
+}
 // 车身会不会压到墙：车身四个角 + 中心，从上往下打射线，碰到房子/楼/石头（不是地面）就算压到
 function tankHullBlocked(x, z, yaw, y) {
   const c = Math.cos(yaw), sn = Math.sin(yaw);
   const near = nearBlockers(HULL_P.set(x, y, z), 6);
   if (!near.length) return false;
+  // 真实城市：谷歌模型把路边的树、停着的车、坡道都烤在同一张网里 → 只在离地 2.2 米水平查楼墙（头顶、车身底下都不查）
+  if (REAL) {
+    for (const [dx, dz] of HULL_EDGE) {
+      const L = Math.hypot(dx, dz);
+      hullRay.set(HULL_P.set(x, y + 2.2, z), _hullD.set((dx * c + dz * sn) / L, 0, (-dx * sn + dz * c) / L));
+      hullRay.far = L + 0.4;
+      if (hullRay.intersectObjects(near, false).length) return true;
+    }
+    return false;
+  }
   // 水平：从车身中心朝四角和前后、左右边中点各打一条（以前只从 8 米高往下打：比 8 米高的楼射线起点在楼里，检测不到；
   // 薄墙从采样点之间漏过去——坦克就穿墙了）
   for (const [dx, dz] of HULL_EDGE) {
@@ -6005,7 +6253,7 @@ function moveTank(t, want, speedT, turnRate, dt) {
       t.inside = (t.inside || 0) + 0.5;
       if (t.inside >= 1) {
         out: for (let r = 3; r <= 15; r += 3) for (let k = 0; k < 12; k++) {
-          const a = k / 12 * Math.PI * 2 + r, x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r, y = terrainH(x, z);
+          const a = k / 12 * Math.PI * 2 + r, x = p.x + Math.sin(a) * r, z = p.z + Math.cos(a) * r, y = REAL ? realRoadY(x, z, p.y) ?? p.y : terrainH(x, z);
           if (!tankHullBlocked(x, z, h0, y)) { p.set(x, y, z); t.inside = 0; break out; }
         }
       }
@@ -6031,19 +6279,19 @@ function moveTank(t, want, speedT, turnRate, dt) {
 }
 // 纽约：沿路网开，到路口挑离钢铁侠近的方向（带点随机，不掉头）；靠近了停下来开炮
 function driveTankCity(t, pc, dt) {
-  const p = t.g.position;
-  let n = NAV[t.node];
+  const p = t.g.position, G = RNAV || NAV;   // 真实城市用真实路网
+  let n = G[t.node];
   if (Math.hypot(n.x - p.x, n.z - p.z) < 3) {
     const opts = n.nb.filter(k => k !== t.prev);
     let best = (opts.length ? opts : n.nb)[0], bs = Infinity;
     for (const k of opts.length ? opts : n.nb) {
       // 往离你近的路口开；发现了你又被楼挡着时，优先去看得见你的那个路口
-      const m = NAV[k], sc = Math.hypot(m.x - pc.x, m.z - pc.z) + rnd() * 60 - ((t.aw ?? 0) >= 1 && !t.los && seesPlayer(_e3.set(m.x, 2.6, m.z)) ? 400 : 0);
+      const m = G[k], sc = Math.hypot(m.x - pc.x, m.z - pc.z) + rnd() * 60 - ((t.aw ?? 0) >= 1 && !t.los && seesPlayer(_e3.set(m.x, (REAL ? p.y : 0) + 2.6, m.z)) ? 400 : 0);
       if (sc < bs) { bs = sc; best = k; }
     }
     t.prev = t.node;
     t.node = best;
-    n = NAV[best];
+    n = G[best];
   }
   const h = t.g.rotation.y;
   const want = Math.atan2(n.x - p.x, n.z - p.z);
@@ -6062,7 +6310,7 @@ function driveTankCity(t, pc, dt) {
   if (moveTank(t, want, speedT, TANK_TURN * 2, dt)) blocked = true;
   t.wait = blocked ? (t.wait || 0) + dt : 0;
   if (t.wait > 3) { [t.node, t.prev] = [t.prev, t.node]; t.wait = 0; }
-  p.y = 0;
+  if (REAL) realTankY(t, dt); else p.y = 0;
 }
 // 守卫：在目标旁 20 米内来回，炮塔对着你；离家远了就开回去
 function driveGuard(t, pc, dt) {
@@ -6088,7 +6336,7 @@ function driveGuard(t, pc, dt) {
 function driveTank(t, pc, dt) {
   if (t.route) return driveConvoy(t, pc, dt);
   if (t.guard) return driveGuard(t, pc, dt);
-  if (NAV) return driveTankCity(t, pc, dt);
+  if (RNAV || NAV) return driveTankCity(t, pc, dt);
   const p = t.g.position;
   const dx = pc.x - p.x, dz = pc.z - p.z, dist = Math.hypot(dx, dz);
   const toP = Math.atan2(dx, dz);
@@ -6143,7 +6391,7 @@ function updateTanks(dt) {
     // 每 0.4 秒查一次视线：被楼挡住就只转炮塔跟着你，不开火
     if (now > (t.losAt || 0)) { t.losAt = now + 0.4; t.los = to.length() < sightR(140) && seesPlayer(t.turret.localToWorld(t.muzzle.clone())); }
     // 你在天上时射程拉到 220 米（高射炮）
-    const air = S.pos.y - terrainH(S.pos.x, S.pos.z) > 6;
+    const air = REAL ? S.flying : S.pos.y - terrainH(S.pos.x, S.pos.z) > 6;
     if (now > (t.losAt2 || 0) && air) { t.losAt2 = now + 0.4; t.los = to.length() < sightR(220) && seesPlayer(t.turret.localToWorld(t.muzzle.clone())); }
     const al = senses(t, t.los, to.length(), dt, 1.4);
     if (al && to.length() < (air ? 220 : 140) && !calm()) {
@@ -9629,6 +9877,22 @@ function enemyJetTakeoff(j, dt) {
   }
   for (const m of j.ab) m.scale.set(1, 1, 0.8 + rnd() * 0.5);
 }
+// 纽约：战斗机要从楼顶上面飞（以前只保证离地 60 米，直接穿大厦）。楼顶高度 25 米一格，用到才量、量过记住
+const roofCache = new Map();
+function roofH(x, z) {
+  const i = Math.round(x / 25), k = Math.round(z / 25), key = i * 100003 + k;
+  let h = roofCache.get(key);
+  if (h === undefined) { h = topAt(i * 25, k * 25); roofCache.set(key, h); }
+  return h;
+}
+// 飞机该保持的最低高度：沿航向往前看 2.5 秒，取路上最高的楼顶（提前爬升，不是撞上了才弹起来）
+function jetFloor(p, vel) {
+  if (!CITY || REAL) return terrainH(p.x, p.z);
+  let h = roofH(p.x, p.z);
+  for (const t of [0.4, 0.8, 1.2, 1.8, 2.5]) h = Math.max(h, roofH(p.x + vel.x * t, p.z + vel.z * t));
+  return h;
+}
+const groundOrRoof = (x, z) => CITY && !REAL ? roofH(x, z) : terrainH(x, z);
 function updateJets(dt) {
   try { updateThrown(dt); } catch (e) { jetErr(e); }
   if (!jets.length) return;
@@ -9664,7 +9928,7 @@ function updateJets(dt) {
       if (!j.extendUntil && dP < 300) j.extendUntil = now + 6;
       if (j.extendUntil && now > j.extendUntil) j.extendUntil = 0;
       const tgt = j.extendUntil ? _e3.copy(p).addScaledVector(fwd, 500).setY(Math.max(p.y, pc.y + 120)) : _e3.copy(pc).addScaledVector(S.vel, 1.2).add(_v.set(-fwd.z, 0, fwd.x).multiplyScalar(j.wing * 40));
-      tgt.y = Math.max(tgt.y, terrainH(tgt.x, tgt.z) + 80);
+      tgt.y = Math.max(tgt.y, terrainH(tgt.x, tgt.z) + 80, jetFloor(p, j.vel) + 50);
       // 绕转轴真正旋转（每秒最多 0.55 弧度）：线性混合在目标正后方时转不过来，冲过头后会一直直线飞走
       const want = tgt.sub(p).normalize(), ang = fwd.angleTo(want), turn = 0.55 * dt;
       const axis = _v.crossVectors(fwd, want); if (axis.lengthSq() < 1e-6) axis.set(0, 1, 0); axis.normalize();
@@ -9704,11 +9968,12 @@ function updateJets(dt) {
       j.vel.y -= 25 * dt; j.roll += dt * 3;
       if (rnd() < 0.9) emitSmoke(p.clone(), _v.set(0, 1, 0), 5, 1.4);
       // 砸到地上：大爆炸，留下一架烧黑的残骸躺在地上冒黑烟（以前直接消失）
-      if (p.y < terrainH(p.x, p.z) + 1) {
+      // 纽约：砸在楼顶上也算（以前穿过楼掉到街上才炸）
+      if (p.y < groundOrRoof(p.x, p.z) + 1) {
         explosion(p.clone(), 3.5); sfx.boom(p, 1);
         j.state = 'wreck'; j.wreckUntil = now + 40;
         const yaw = Math.atan2(j.vel.x, j.vel.z);
-        p.y = terrainH(p.x, p.z) + (j.gearH || 1.6) * 0.6;   // 起落架断了、机腹贴地
+        p.y = groundOrRoof(p.x, p.z) + (j.gearH || 1.6) * 0.6;   // 起落架断了、机腹贴地
         j.g.rotation.set((rnd() - 0.5) * 0.15, yaw, (rnd() - 0.5) * 0.5);
         j.vel.set(0, 0, 0);
         for (const m of j.ab || []) m.visible = false;
@@ -9723,6 +9988,12 @@ function updateJets(dt) {
     }
     p.addScaledVector(j.vel, dt);
     p.y = Math.max(p.y, terrainH(p.x, p.z) + (j.state === 'crash' ? 0 : 60));
+    // 纽约：前方有高楼就平滑拉升到楼顶上 40 米；脚下这栋楼保底再高 15 米（绝不穿楼）
+    if (CITY && !REAL && j.state !== 'crash') {
+      const fl = jetFloor(p, j.vel) + 40;
+      if (p.y < fl) { p.y += (fl - p.y) * damp(3, dt); if (j.vel.y < 0) j.vel.y *= 1 - damp(4, dt); }
+      p.y = Math.max(p.y, roofH(p.x, p.z) + 15);
+    }
     // 机头朝速度方向（模型机头朝 +Z），按转弯侧倾
     j.g.quaternion.setFromUnitVectors(_v.set(0, 0, 1), _d.copy(j.vel).normalize()).multiply(_q.setFromAxisAngle(_v.set(0, 0, 1), j.roll));
     for (const m of j.ab) m.scale.set(1, 1, 0.8 + rnd() * 0.5);
@@ -10483,7 +10754,119 @@ function fixCourtyardRoofs() {
   }
   console.log('[city] courtyard roofs removed:', removed.length);
 }
+const CITY_COURTYARDS = [[-739.4,-118.0,-750.2,-98.8,-731.3,-88.3,-720.5,-107.4,-739.4,-118.0],[669.2,-494.8,687.2,-485.0,696.1,-501.1,678.1,-510.9,669.2,-494.8],[-388.3,290.8,-389.3,292.7,-383.9,295.7,-382.8,293.7,-388.3,290.8],[-403.9,605.0,-411.1,618.6,-404.5,622.1,-397.3,608.5,-403.9,605.0],[-353.9,573.0,-353.1,571.6,-355.3,570.3,-356.2,571.7,-355.2,572.3,-353.9,573.0],[-349.4,564.7,-348.6,563.3,-350.8,561.9,-351.6,563.3,-349.4,564.7],[-351.6,568.8,-350.8,567.4,-353.0,566.1,-353.8,567.5,-351.6,568.8],[-682.9,-696.6,-679.5,-702.8,-682.1,-704.2,-685.5,-698.0,-682.9,-696.6],[-108.0,515.1,-105.9,511.2,-103.6,512.5,-101.6,508.9,-121.8,497.7,-125.9,505.1,-108.0,515.1],[878.2,529.8,878.6,531.3,885.3,535.1,889.9,526.7,882.3,522.5,878.2,529.8],[733.4,54.8,729.9,52.9,722.6,66.2,726.2,68.2,721.0,77.5,733.9,84.5,739.4,74.5,736.8,73.1,743.2,61.4,745.8,62.8,751.5,52.6,738.5,45.5,733.4,54.8],[667.4,-228.5,670.5,-234.0,659.5,-240.3,656.3,-234.8,662.0,-231.6,667.4,-228.5],[-814.4,-616.6,-813.5,-618.3,-817.3,-620.4,-818.3,-618.7,-814.4,-616.6],[-674.0,-507.0,-666.5,-502.8,-660.2,-514.1,-667.7,-518.3,-674.0,-507.0],[-329.1,-137.3,-324.8,-144.7,-340.5,-153.9,-344.8,-146.5,-329.1,-137.3],[-227.6,-447.2,-224.0,-453.8,-227.2,-455.5,-230.8,-449.0,-227.6,-447.2],[-231.6,-447.6,-233.8,-443.6,-230.6,-441.8,-228.4,-445.8,-231.6,-447.6],[-488.1,-18.7,-487.1,-20.3,-475.8,-69.7,-477.4,-69.7,-478.9,-68.0,-481.5,-67.2,-490.9,-72.5,-504.9,-79.7,-526.4,-40.0,-503.2,-27.3,-488.1,-18.7],[372.1,278.6,420.2,305.0,418.0,306.5,415.6,308.0,414.1,309.0,413.5,309.4,406.6,312.5,404.6,313.4,397.3,315.6,394.4,316.4,381.8,318.8,372.4,319.1,367.4,319.3,358.5,318.6,353.1,317.6,350.6,317.1,372.1,278.6],[669.2,-494.8,687.2,-485.0,696.1,-501.1,678.1,-510.9,669.2,-494.8],[-424.9,686.5,-415.1,692.0,-412.9,688.1,-394.2,698.5,-396.3,702.4,-391.9,704.8,-376.1,713.6,-371.8,716.0,-369.6,712.1,-350.9,722.5,-353.0,726.4,-342.7,732.1,-362.9,767.8,-373.1,762.1,-375.5,766.3,-394.2,755.9,-391.9,751.8,-396.3,749.4,-412.1,740.6,-416.4,738.2,-418.8,742.3,-437.5,731.9,-435.2,727.7,-445.0,722.3,-424.9,686.5],[702.1,379.2,691.3,398.3,693.8,432.4,700.2,435.9,710.8,417.1,708.6,382.8,702.1,379.2]];
+// ---- 天井：OSM 里 22 栋带天井的楼，生成城市时只取了外轮廓（屋顶把天井整个盖住，飞进去出不来、抬头天被封住）。
+// 天井轮廓（上面的 CITY_COURTYARDS，游戏坐标 x 东 z 南，tools 里按 build_city_osm.py 同样的投影从 source/city/osm 提取）：
+// 屋顶在轮廓里不画、射线打不到；沿轮廓从地面砌到屋顶补一圈内墙（原来没有内墙，挖开后往下看是空心的楼）
+function openCourtyards() {
+  const polys = CITY_COURTYARDS.map(a => { const pts = []; for (let i = 0; i < a.length; i += 2) pts.push([a[i], a[i + 1]]); return pts; });
+  const inPoly = (x, z, pts) => { let c = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) c = !c; } return c; };
+  const boxes = polys.map(pts => { let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; for (const [x, z] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); } return [x0, x1, z0, z1]; });
+  const inAny = (x, z) => polys.some((pts, k) => { if (!opened.has(k)) return false; const b = boxes[k]; return x > b[0] && x < b[1] && z > b[2] && z < b[3] && inPoly(x, z, pts); });
+  // 屋顶高度：天井中心往下打射线，第一下打到的水平面
+  const ray = new THREE.Raycaster(), roofMats = new Set(), city = rayMeshes.filter(o => !isTerrain(o) && o.userData.cityMesh);
+  const walls = [], opened = new Set(), skip = { noRoof: 0, landmark: 0, noFacade: 0 };
+  polys.forEach((pts, k) => {
+    let cx = 0, cz = 0; for (const [x, z] of pts) { cx += x; cz += z; } cx /= pts.length; cz /= pts.length;
+    // 楼顶高度：从天井每个角往外 2.5 米（落在楼身上）往下打，取水平面高度的中位数（天井中间的屋顶可能已经被 fixCourtyardRoofs 删了）
+    const ys = []; let h = null;
+    for (const [x, z] of pts) {
+      const dx = x - cx, dz = z - cz, L = Math.hypot(dx, dz) || 1;
+      ray.set(_a.set(x + dx / L * 2.5, 600, z + dz / L * 2.5), DOWN); ray.far = 600;
+      const hh = ray.intersectObjects(city, false).find(q => q.face && q.face.normal.clone().transformDirection(q.object.matrixWorld).y > 0.9);
+      if (hh && hh.point.y > 4) { ys.push(hh.point.y); h ||= hh; }
+    }
+    if (!ys.length) { skip.noRoof++; return; }
+    ys.sort((a, b) => a - b);
+    // 地标（帝国大厦、克莱斯勒）的楼座换成了扫描模型：它们地基数据里的洞不处理
+    if (Object.values(LANDMARKS || {}).some(L => Math.hypot(L.x - cx, L.z - cz) < 80)) { skip.landmark++; return; }
+    // 补墙要用这栋楼的外墙贴图；找不到就不开这个天井（开了往下看是空心的楼）
+    // 外墙材质：从楼外 40 米、半楼高处朝天井中心水平打射线，第一下打到的外墙（屋顶和外墙是分开的网格）
+    let wallMat = null;
+    for (const [x, z] of pts) {
+      const dx = x - cx, dz = z - cz, L = Math.hypot(dx, dz) || 1;
+      ray.set(_a.set(x + dx / L * 40, Math.min(ys[0] * 0.5, 30), z + dz / L * 40), _b.set(-dx / L, 0, -dz / L)); ray.far = 45;
+      const hw = ray.intersectObjects(city, false)[0];
+      const m = hw && [].concat(hw.object.material)[hw.face?.materialIndex ?? 0];
+      if (m && /facade_/.test(m.name)) { wallMat = m; break; }
+    }
+    if (!wallMat) { skip.noFacade++; skip.mats = [].concat(h.object.material).map(m => m.name).join(','); return; }
+    const mat = [].concat(h.object.material)[h.face.materialIndex ?? 0];
+    if (mat) roofMats.add(mat);
+    opened.add(k);
+    walls.push({ pts, top: ys[0], mat: wallMat });   // 墙高取四周最矮的楼顶（取高了会戳出旁边矮的那截楼）
+  });
+  // 屋顶材质：天井里的片元丢掉（多边形塞进着色器：每个天井先比包围盒，再逐边判断）
+  const flat = [], meta = [];
+  const useP = polys.filter((_, k) => opened.has(k)), useB = boxes.filter((_, k) => opened.has(k));
+  console.log('[city] courtyard skip', JSON.stringify(skip), 'opened', opened.size);
+  if (!useP.length) return;
+  useP.forEach((pts, k) => { meta.push(new THREE.Vector4(useB[k][0], useB[k][1], useB[k][2], useB[k][3]), new THREE.Vector4(flat.length / 2, pts.length, 0, 0)); for (const [x, z] of pts) flat.push(x, z); });
+  const ptsV = []; for (let i = 0; i < flat.length; i += 2) ptsV.push(new THREE.Vector2(flat[i], flat[i + 1]));
+  const NP = ptsV.length, NC = useP.length;
+  for (const m of roofMats) {
+    const prev = m.onBeforeCompile, key0 = m.customProgramCacheKey?.bind(m);
+    m.onBeforeCompile = (sh, r) => {
+      prev?.call(m, sh, r);
+      sh.uniforms.uCyP = { value: ptsV }; sh.uniforms.uCyM = { value: meta };
+      if (!/varying vec3 vWPos/.test(sh.vertexShader)) addWPos(sh);
+      sh.fragmentShader = sh.fragmentShader.replace('void main() {', `uniform vec2 uCyP[${NP}]; uniform vec4 uCyM[${NC * 2}];
+bool inCourtyard(vec2 p) {
+  for (int k = 0; k < ${NC}; k++) {
+    vec4 b = uCyM[k * 2];
+    if (p.x < b.x || p.x > b.y || p.y < b.z || p.y > b.w) continue;
+    int o = int(uCyM[k * 2 + 1].x), n = int(uCyM[k * 2 + 1].y);
+    bool c = false;
+    for (int i = 0; i < 64; i++) {
+      if (i >= n) break;
+      vec2 a = uCyP[o + i], q = uCyP[o + (i == 0 ? n - 1 : i - 1)];
+      if ((a.y > p.y) != (q.y > p.y) && p.x < (q.x - a.x) * (p.y - a.y) / (q.y - a.y) + a.x) c = !c;
+    }
+    if (c) return true;
+  }
+  return false;
+}
+void main() {
+  if (vWNorm.y > 0.9 && vWPos.y > 4.0 && inCourtyard(vWPos.xz)) discard;`);
+    };
+    m.customProgramCacheKey = () => (key0 ? key0() : '') + '_courtyard';
+    m.needsUpdate = true;
+  }
+  // 射线：打到天井里的屋顶面就当没打到（人、子弹、镜头都能从天井里出入）
+  for (const o of city) {
+    const rc = o.raycast;
+    o.raycast = function (r, out) {
+      const n = out.length;
+      rc.call(this, r, out);
+      for (let i = out.length - 1; i >= n; i--) { const h = out[i]; if (h.point.y > 4 && h.face && Math.abs(h.face.normal.y) > 0.9 && inAny(h.point.x, h.point.z)) out.splice(i, 1); }
+    };
+  }
+  // 内墙：沿轮廓一圈竖墙（两面都画），按 4 米一格贴外墙的贴图坐标
+  const geoByMat = new Map();
+  for (const w of walls) {
+    const pos = [], uv = [];
+    for (let i = 0; i < w.pts.length; i++) {
+      const [x0, z0] = w.pts[i], [x1, z1] = w.pts[(i + 1) % w.pts.length], L = Math.hypot(x1 - x0, z1 - z0);
+      if (L < 0.2) continue;
+      pos.push(x0, 0, z0, x1, 0, z1, x1, w.top, z1, x0, 0, z0, x1, w.top, z1, x0, w.top, z0);
+      uv.push(0, 0, L / 10, 0, L / 10, w.top / 14, 0, 0, L / 10, w.top / 14, 0, w.top / 14);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    (geoByMat.get(w.mat) || geoByMat.set(w.mat, []).get(w.mat)).push(g);
+  }
+  for (const [mat, gs] of geoByMat) {
+    const m = new THREE.Mesh(mergeGeometries(gs), mat.clone()); m.material.side = THREE.DoubleSide;
+    m.name = 'courtyard_walls'; m.castShadow = m.receiveShadow = true;
+    scene.add(m); m.updateMatrixWorld(true);
+    m.geometry.computeBoundingSphere(); m.userData.ws = m.geometry.boundingSphere.clone();
+    rayMeshes.push(m); camBlockers.push(m);
+  }
+  console.log('[city] courtyards opened:', walls.length, 'roof mats', roofMats.size);
+}
 if (CITY) fixCourtyardRoofs();
+if (CITY && !NB && !REAL) openCourtyards();   // 天井轮廓是纽约的数据
 // ---- 公园草坪：生成城市时只是一块纯绿平面（像一块绿布）→ 表面加深浅变化、修剪条纹、草叶噪点；镜头附近 38 米长出会随风摆的矮草叶（每平方米 9 丛）----
 var lawn = null;
 function setupLawn() {
@@ -10940,6 +11323,7 @@ function tsCanvas(hacked, i = 0) {
 // 4 个据点按固定顺序搭（时代广场的射线要在中央车站腾空之前打，免得打到被删掉的楼）
 function nycSites() {
   const out = [];
+  if (NB || REAL) return out;   // 宁波 / 真实纽约没有这四个主题据点
   const tryB = f => { try { const s = f(); if (s) out.push(s); } catch (e) { console.warn('[nyc site]', e); } };
   tryB(buildEsbPlatform);
   tryB(buildTimesSquare);
@@ -11798,10 +12182,26 @@ const fallingBus = [];
 function updateFallingBus(dt) {
   for (let i = fallingBus.length - 1; i >= 0; i--) {
     const b = fallingBus[i];
-    b.vy -= 9.8 * dt;
-    b.g.position.y += b.vy * dt; b.g.position.addScaledVector(b.n, 3 * dt);
-    b.g.rotation.x = Math.min(2.6, b.g.rotation.x + dt * 1.8);
-    if (b.g.position.y <= 1.5) { explosion(b.g.position.clone().setY(1.5), 1.6); scene.remove(b.g); fallingBus.splice(i, 1); }
+    if (!b.wreck) { b.vy -= 9.8 * dt; b.g.position.y += b.vy * dt; b.g.position.addScaledVector(b.n, 3 * dt); }
+    if (!b.wreck) b.g.rotation.x = Math.min(2.6, b.g.rotation.x + dt * 1.8);
+    // 砸到街上：不再凭空消失——留下一辆烧黑、压扁、歪着的残骸，先着火、再冒黑烟，60 秒后才收走
+    if (!b.wreck) {
+      const gy = groundY(b.g.position.x, b.g.position.z, b.g.position.y);
+      if (b.g.position.y <= gy + 1.5) {
+        b.wreck = true; b.until = now + 60; b.fireUntil = now + 12;
+        explosion(b.g.position.clone().setY(gy + 1.5), 1.6); sfx.boom(b.g.position, 1); S.shake = Math.max(S.shake, clamp(1 - b.g.position.distanceTo(S.pos) / 120, 0, 0.7));
+        // 车头先着地：有点翘、往一边歪，车顶被压扁
+        b.g.rotation.x = (rnd() - 0.5) * 0.25; b.g.rotation.z = (rnd() < 0.5 ? -1 : 1) * (0.08 + rnd() * 0.1);
+        b.g.scale.y *= 0.82;
+        b.g.position.y = gy + 1.6 * 0.82 - 0.2;
+        b.g.traverse(o => { if (o.isMesh && o.material) { o.userData.orig ??= o.material; o.material = [].concat(o.userData.orig).map(charredOf).reduce((a, b, i, arr) => arr.length === 1 ? b : arr); } });
+      }
+      continue;
+    }
+    const bp = b.g.position;
+    if (now < b.fireUntil && rnd() < dt * 30) emit(_a.copy(bp).add(_b.set((rnd() - 0.5) * 3, 1.2, (rnd() - 0.5) * 8).applyAxisAngle(UP, b.g.rotation.y)), _v.set(0, 2.5, 0), 0.7, 0.9, 1);
+    if (rnd() < dt * (now < b.fireUntil ? 14 : 6)) emitSmoke(_a.copy(bp).add(_b.set((rnd() - 0.5) * 3, 1.5, (rnd() - 0.5) * 8).applyAxisAngle(UP, b.g.rotation.y)), _v.set(0, 2.5, 0), 6, 1.6);
+    if (now > b.until) { scene.remove(b.g); fallingBus.splice(i, 1); }
   }
 }
 // ---------------- 自动脱困：四面都是墙、头顶也盖着（掉进楼里出不来），连着 4 秒就挪到头顶那栋楼的楼顶上 ----------------
@@ -11865,6 +12265,20 @@ function updateRaidHud() {
 
 var nycTroopKit = nycTroopKit || null;
 if (CITY) { if (nycTroopKit) await nycPeople(nycTroopKit); nycInit(); }
+// 真实纽约：只飞行，不刷任何敌人
+// 真实城市：没有救人、没有别的敌人；有真实路网的城市（威尼斯没有）来坦克：一局 REAL_TANKS 辆，同时最多 4 辆，开局 10 秒后陆续开过来
+const REAL_TANKS = 8;
+if (REAL) {
+  for (const k in cityLeft) cityLeft[k] = 0;
+  cityLeft.tank = RNAV ? REAL_TANKS : 0;
+  let act = 0;
+  for (const t of tanks) {
+    t.alive = false; t.g.visible = false;
+    if (RNAV && !t.guard && !t.route && act < 4) { t.spent = false; t.respawn = now + 10 + act * 8; act++; }
+    else { t.respawn = 1e9; t.spent = true; }
+  }
+  RES.next = 1e9; RES.count = 99;
+}
 const OBJ_NAME = CITY ? 'NODE' : 'DEPOT';
 // ---- 情报（沙漠）：开局只知道离村子最近的一个武器库，其余的不指路、小地图不显示；
 // 救下人质、打掉雷达站、守住古尔米拉都会拿到一个武器库的位置，也可以自己飞过去找（营地 350 米、山洞 80 米内发现） ----
@@ -12543,9 +12957,25 @@ function updateHelis(dt) {
     if (CITY && h.vel.lengthSq() > 1) {
       heliRay.set(p, _d.copy(h.vel).normalize());
       heliRay.far = h.vel.length() * 1.5 + 12;
-      if (heliRay.intersectObjects(nearBlockers(p, heliRay.far + 8), false)[0]) h.vel.y = Math.max(h.vel.y, 14);
+      const hit = heliRay.intersectObjects(nearBlockers(p, heliRay.far + 8), false)[0];
+      if (hit) {
+        h.vel.y = Math.max(h.vel.y, 14);
+        // 快贴上墙了：去掉朝墙的水平速度，顺着墙滑开（以前只往上拉、水平照飞，直接钻进楼里）
+        if (hit.distance < 12 && hit.face) {
+          const n = _b.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).setY(0);
+          if (n.lengthSq() > 1e-4) { n.normalize(); const vn = h.vel.x * n.x + h.vel.z * n.z; if (vn < 0) { h.vel.x -= vn * n.x; h.vel.z -= vn * n.z; } }
+        }
+      }
     }
     p.addScaledVector(h.vel, dt);
+    // 保底：这一帧走的路（机身半径算 5 米）穿过了楼面就退回去、往上爬，绝不进楼
+    if (CITY) {
+      const step = _e3.copy(h.vel).multiplyScalar(dt), L = step.length();
+      if (L > 1e-4) {
+        heliRay.set(_p.copy(p).sub(step), step.divideScalar(L)); heliRay.far = L + 5;
+        if (heliRay.intersectObjects(nearBlockers(p, 15), false)[0]) { p.addScaledVector(h.vel, -dt); h.vel.x *= 0.2; h.vel.z *= 0.2; h.vel.y = Math.max(h.vel.y, 12); p.y += 12 * dt; }
+      }
+    }
     // 机头对着你；转弯时侧倾、前飞时低头
     const to = _e3.copy(pc).sub(p);
     // 看得见你：机头对着你；发现过但被楼挡着：对着最后看到你的地方（以前隔着楼机头也一直精准跟着你转）
@@ -12681,7 +13111,7 @@ function killUltron() {
 const ultronRay = new THREE.Raycaster();
 function updateUltron(dt) {
   const U = ultron;
-  if (!U) return;
+  if (!U || REAL) return;
   // 4 座信号塔全炸掉 4 秒后奥创出场（没有信号塔时退回第 4 波）
   const ready = depots.length ? depots.every(d => !d.alive) && now > S.depotsClearedAt + 4 && !S.bossFought : S.wave >= (S.nextUltron ?? 4);
   if (!U.alive && !U.g.visible && ready && !calm()) { S.bossFought = true; spawnUltron(); }
@@ -13058,14 +13488,16 @@ function hulkHit(t, amt) {
   if (amt >= HULK_HIT_MAX && !H.enraged && free && rnd() < 0.5) hulkSet('stun', 'stun');
   else if (H.hitAcc > 20 && free && now > (H.flinchCd || 0)) { H.hitAcc = 0; H.flinchCd = now + 3; hulkSet('flinch', 'hit'); }   // 踉跄要挨得多、3 秒内最多一次（以前两拳就踉跄，出招总被打断）
 }
+// 血打空：不是打死，是被打跑——踉跄一下，转身连跳几下逃出你的视野（这局不再来）
 function killHulk() {
   const H = hulk;
-  H.alive = false; H.engaged = false; H.beaten = true;
-  hulkSet('dead', 'die');
-  slowUntil = rawNow + 2000; slowK = 0.35;
+  H.alive = false; H.engaged = false; H.beaten = true; H.fleeing = true; H.fleeN = 3;
+  // 正在半空：落地后再逃（不再抓人）
+  if (H.air) H.air.grab = false; else hulkSet('flee', 'hit');
+  slowUntil = rawNow + 1500; slowK = 0.35;
   H.rock.visible = false; H.rockOn = false;
   S.stats.hulk = 1;
-  notice('HULK DOWN · HE WON\'T BE BACK', '#ffb347', 3500, 1);
+  notice('HULK RETREATS · HE WON\'T BE BACK', '#ffb347', 3500, 1);
   setTimeout(() => shedHulkbuster('HULKBUSTER DISENGAGING'), 3500);
 }
 // 某一点能站的最高面（楼顶，或者地面）
@@ -13090,7 +13522,7 @@ function hulkHop(to, peakMin = 0) {
   H.air = { from, to: land, t: 0, dur, peak: Math.min(peak, 230), hit: false, grab: true };
   hulkSet('hop', 'atk02');
   // 起跳：脚下炸开一圈（近处的你也会被震到）
-  hulkShock(from, 7, 10);
+  hulkShock(from, 7, H.fleeing ? 0 : 10);
 }
 function updateHulk(dt) {
   const H = hulk;
@@ -13133,6 +13565,25 @@ function updateHulk(dt) {
   const face = (k = 6) => { H.yaw = lerpAngle(H.yaw, Math.atan2(toP.x, toP.z), damp(k, dt)); };
   if (H.state === 'dead') {
     if (H.st > 25) { H.g.visible = false; H.state = 'off'; }   // 躺 25 秒后收走（beaten 了不再刷）
+  } else if (H.state === 'flee') {
+    // 逃跑：踉跄完（或上一跳落地站稳）就背对你往远处跳 180 米，跳完 3 下收走
+    if (H.st > (H.fleeN === 3 ? 1.0 : 0.3)) {
+      if (H.fleeN <= 0) { H.g.visible = false; H.state = 'off'; H.fleeing = false; }
+      else {
+        H.fleeN--;
+        const away = _e3.set(p.x - S.pos.x, 0, p.z - S.pos.z);
+        if (away.lengthSq() < 1) away.set(Math.sin(H.yaw + Math.PI), 0, Math.cos(H.yaw + Math.PI));
+        away.normalize();
+        // 往地图里面逃（撞到边就沿边拐）：试正后方和左右偏 45°、90°，挑落点在地图内的
+        let to = null;
+        for (const da of [0, 0.8, -0.8, 1.6, -1.6, Math.PI]) {
+          const c = Math.cos(da), sn = Math.sin(da), x = p.x + (away.x * c - away.z * sn) * 180, z = p.z + (away.x * sn + away.z * c) * 180;
+          if (Math.abs(x) < 900 && Math.abs(z) < 760) { to = new V3(x, 0, z); break; }
+        }
+        hulkHop(to || new V3(0, 0, 0));
+        H.air.grab = false;
+      }
+    }
   } else if (H.state === 'rampage') {
     // 撒野：在出现的路口附近 60 米内来回走，每隔几秒捶一下地，把旁边的车掀翻、行人吓跑（死伤算在他头上）
     if (!H.roam || Math.hypot(H.roam.x - p.x, H.roam.z - p.z) < 3) { const a = rnd() * Math.PI * 2, r = 15 + rnd() * 45; H.roam = new V3(H.home.x + Math.sin(a) * r, 0, H.home.z + Math.cos(a) * r); }
@@ -13240,7 +13691,7 @@ function updateHulk(dt) {
     if (H.air && a) { if (H.air.t > 0.2 && H.air.dur - H.air.t > 0.25) a.time = 0.42; }
     if (!H.air) hulkSet('land');
   } else if (H.state === 'land') {
-    if (H.st > 0.55 / rage) hulkSet('chase', 'walk');
+    if (H.st > 0.55 / rage) hulkSet(H.fleeing ? 'flee' : 'chase', H.fleeing ? null : 'walk');
   }
   // ---- 抛物线跳跃 ----
   if (H.air) {
@@ -13261,7 +13712,7 @@ function updateHulk(dt) {
     if (k >= 1) {
       H.air = null;
       p.y = Math.max(A.to.y, supportH(p.x, p.z, p.y + 1));
-      hulkShock(p, 10, 22);   // 落地砸出一圈
+      hulkShock(p, 10, H.fleeing ? 0 : 22);   // 落地砸出一圈（逃跑时不伤人）
     }
   }
   // ---- 飞出去的水泥板 ----
@@ -13403,7 +13854,7 @@ if (samBuf) {
   });
 }
 const sams = [];
-if (samProto) {
+if (samProto && !REAL) {
   // 找空地：沙漠在村外 110~200 米；纽约在离出生点 150~400 米、够大的平屋顶上
   const blocks = camBlockers.filter(o => !isTerrain(o));
   const ray = new THREE.Raycaster(), down = new V3(0, -1, 0);
@@ -14019,7 +14470,7 @@ const ZH_SEG = {
   'HULK SIGHTED': '发现 HULK', 'VERONICA STANDING BY': 'Veronica 待命', 'VERONICA': 'Veronica', 'HULKBUSTER INBOUND': '反浩克机甲投放中', 'HULKBUSTER ONLINE': '反浩克机甲上线',
   'HULKBUSTER DISENGAGING': '反浩克机甲脱离', 'HULKBUSTER RECALLED': '反浩克机甲收回', 'HULKBUSTER LOST': '反浩克机甲报废', "HE WON'T BE BACK": '他不会再来了', 'KILLED BY HULK': '被 HULK 波及', 'DEFEATED': '已击倒',
   'HULK SMASH!': 'HULK 砸！', 'ARMOR CONVOY ENGAGING': '装甲车队开火', 'BUS HELD BY SENTRIES': '奥创哨兵吊着一辆公交车', 'DESTROY THE SENTRIES': '打掉哨兵', 'SENTRIES LET GO': '哨兵松手了', 'BUS FALLING': '公交车下坠', 'CATCH IT': '接住它',
-  'CAUGHT': '接住了', 'LOWER IT DOWN': '慢慢放到街上', 'BUS DOWN SAFELY': '公交车安全落地', 'BUS CRASHED': '公交车摔下去了', 'DESTROY': '打掉', 'CATCH': '接住', 'STUCK': '被困', 'RELOCATED TO ROOF': '已移到楼顶', 'HULK IS ENRAGED': 'HULK 狂暴了', 'HULK DOWN': 'HULK 倒下了', 'HULK GRABBED YOU': '被 HULK 一把拍下来', 'HULK DESTROYED': 'HULK 被击倒',   // Boss 名字界面一律英文
+  'CAUGHT': '接住了', 'LOWER IT DOWN': '慢慢放到街上', 'BUS DOWN SAFELY': '公交车安全落地', 'BUS CRASHED': '公交车摔下去了', 'DESTROY': '打掉', 'CATCH': '接住', 'STUCK': '被困', 'RELOCATED TO ROOF': '已移到楼顶', 'HULK IS ENRAGED': 'HULK 狂暴了', 'HULK DOWN': 'HULK 倒下了', 'HULK RETREATS': 'HULK 被打跑了', 'HULK GRABBED YOU': '被 HULK 一把拍下来', 'HULK DESTROYED': 'HULK 被击倒',   // Boss 名字界面一律英文
   'CIVILIANS RESCUED': '救下平民', 'CIVILIANS LOST': '没救下的平民', 'KILLED BY ULTRON': '被奥创杀害',
   'HOSTILES KILLED': '消灭敌人', 'SURRENDERS ACCEPTED': '接受投降', 'DAMAGE TAKEN': '受到伤害', 'DODGES': '闪避次数', 'IRON MONGER DESTROYED': 'IRON MONGER 已摧毁', 'ULTRON DESTROYED': 'ULTRON 已摧毁',
 };
@@ -14107,7 +14558,8 @@ function updateHud(dt) {
   if (hudT > 0) return;
   hudT = 0.1;
   hud.mode.textContent = (S.hb ? '反浩克机甲 · ' : '') + (CITY ? `剩余敌军 ${cityEnemiesLeft()} · ` : `第 ${S.wave} 波 · `) + (depots.length ? (CITY ? `片区解放 ${depots.filter(d => !d.alive).length}/${depots.length} · ` : `武器库 ${depots.filter(d => !d.alive).length}/${depots.length} · `) : '') + (S.flying ? (S.scOn ? '超音速巡航' : key.ShiftLeft || key.ShiftRight ? '加速' : '飞行') : S.takeoffT >= 0 ? '起飞' : '地面');
-  hud.alt.textContent = (S.pos.y - terrainH(S.pos.x, S.pos.z)).toFixed(0);
+  // 真实城市：离脚下真实地面的高度（量不到时按地面 -20 算）
+  hud.alt.textContent = Math.max(0, S.pos.y - (REAL ? realKeepAbove.g ?? -20 : terrainH(S.pos.x, S.pos.z))).toFixed(0);
   hud.spd.textContent = (S.vel.length() * 3.6).toFixed(0);
   const vk = visibility(), vn = Math.round(vk * 8);
   $('visBar').textContent = '▮'.repeat(vn) + '▯'.repeat(8 - vn);
@@ -14800,6 +15252,7 @@ function frame() {
   for (const l of flashes) l.intensity *= Math.exp(-dt * 10);
 
   updateCamera(dt);
+  if (realTiles) { camera.updateMatrixWorld(); const cc = realTiles.colCam; cc.position.set(S.pos.x, Math.max(S.pos.y, 0) + 350, S.pos.z); cc.lookAt(S.pos.x, -1000, S.pos.z); cc.updateMatrixWorld(); realTiles.errorTarget = REAL_ERR; realTiles.setResolution(camera, innerWidth, innerHeight); realTiles.update(); realTiles.registerTileMeshes(); realKeepAbove(); }
   updateCine(dt);
   updateDayCycle();
   updateStorm(dt);
