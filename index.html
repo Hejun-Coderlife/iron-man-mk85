@@ -3990,7 +3990,12 @@ function ceilClamp(pos, d, vel) {
   near = nearBlockers(pos, d.length() + 4).filter(o => !o.userData.noCeil);
   let top = Infinity;
   for (const [ox, oz] of [[0, 0], [RAD, 0], [-RAD, 0], [0, RAD], [0, -RAD]]) {
+    // 贴着墙时肩膀那一侧的点插进了楼里：从楼里往上会打到这栋楼自己的屋顶背面，误判成头顶被盖住、怎么都飞不上去
+    // （反浩克机甲块头大，降进楼缝贴墙就被「锁」在半空）——中心到这个点之间隔着墙就不用这个点
+    if (ox || oz) { _cD.set(Math.sign(ox), 0, Math.sign(oz)); if (castBlock(_cA.set(pos.x + d.x, pos.y + 1.0, pos.z + d.z), _cD, RAD + 0.05)) continue; }
     const hit = castBlock(_cA.set(pos.x + d.x + ox, pos.y + 1.0, pos.z + d.z + oz), UPV, HEAD_H - 1.0 + d.y + 0.05);
+    // 肩膀那几个点只认朝下的面（真正的屋檐、岗亭底）；朝上的是从楼里面打到的屋顶，不算
+    if (hit && (ox || oz) && _cN.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).y > 0.3) continue;
     if (hit) top = Math.min(top, hit.point.y);
   }
   if (top === Infinity) return;
