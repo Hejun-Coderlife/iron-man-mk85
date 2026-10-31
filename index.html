@@ -4055,6 +4055,35 @@ function supportH(x, z, y) {
   return g;
 }
 
+// 被困自救：山崖是只扫了正面的岩壁（双面、背后空心），钻到它背后或底下，四周和头顶的射线全打在岩壁上，怎么飞都出不来。
+// 按着方向键 1.2 秒几乎没挪窝，并且四周 8 个方向至少 7 个、加上头顶都被堵死 → 抬到正上方的楼顶/石头顶上
+const _uP = new V3();
+function unstuck(dt, want) {
+  const moved = _uP.distanceTo(S.pos);
+  _uP.copy(S.pos);
+  if (!want || moved > 0.5 * dt || S.vault || S.dropIn || S.down || S.knock || S.landT > 0 || (SUB && S.pos.y < -0.3)) { S.stuckT = 0; return; }
+  S.stuckT = (S.stuckT || 0) + dt;
+  if (S.stuckT < 1.2) return;
+  S.stuckT = 0;
+  near = nearBlockers(S.pos, 4);
+  const up = castBlock(_cA.set(S.pos.x, S.pos.y + 1.0, S.pos.z), UPV, 40);
+  if (!up?.object.userData.ws) return;
+  let shut = 0;
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4;
+    if (castBlock(_cA.set(S.pos.x, S.pos.y + 1.0, S.pos.z), _cD.set(Math.sin(a), 0, Math.cos(a)), 3)) shut++;
+  }
+  if (shut < 7) return;
+  // 落到正上方最高的那个面上（楼顶、石头顶）；纽约的楼是 400 米一块合成的，按包围球顶抬会一下弹到几百米高
+  const ws = up.object.userData.ws, top = ws.center.y + ws.radius + 1;
+  const roof = castBlock(_cA.set(S.pos.x, top, S.pos.z), DOWN, top - S.pos.y - 1);
+  S.pos.y = roof ? roof.point.y + 0.5 : top;
+  S.vel.set(0, 0, 0);
+  S.flying = true; S.takeoffT = -1; S.scOn = false;
+  _uP.copy(S.pos);
+  notice('SUIT FREED', '#8fe3ff', 1500);
+}
+
 /* ================= 闪避 ================= */
 // 往一个方向猛推一下（飞行中带一个侧滚）：0.35 秒、这段时间子弹炮弹打不到；冷却 2 秒
 const DASH_T = 0.35, DASH_CD = 2;
@@ -4312,6 +4341,7 @@ function physics(dt) {
   }
   S.scTap = false;
   if (S.pos.y > 600) { S.pos.y = 600; S.vel.y = Math.min(S.vel.y, 0); }   // 高度上限 600 米：顶到了就不再往上冲
+  unstuck(dt, ix || iz || key.Space || key.KeyC);
   S.tilt += (tiltT - S.tilt) * damp(3, dt);
   if (S.damaged && S.flying) rollT += Math.sin((S.wobT || 0) * 6.1) * 0.18;   // 严重受损：飞着身体左右乱晃
   S.roll += (rollT - S.roll) * damp(3, dt);
@@ -14438,7 +14468,7 @@ const ZH_SEG = {
   'NO MORE DRONE REINFORCEMENTS': '不会再有无人机增援', 'REPAIR PAD': '维修台', 'ARMOR & SHIELD RESTORED': '装甲和护盾已修复', 'RESTRICTED AIRSPACE': '管制空域', 'TRANSPONDER DETECTED': '已被雷达识别',
   'RETURN TO COMBAT ZONE': '返回作战区域', 'SAM LAUNCH': '防空导弹发射', 'SAM SITE DESTROYED': '防空导弹车已摧毁', 'SANDSTORM INCOMING': '沙尘暴来袭', 'SCANNING…': '扫描中…', 'SENTRIES SUMMONED': '哨兵机器人已召唤',
   'SHIELD DOWN': '护盾已破', 'DESTROY THE NODE': '摧毁信号节点', 'STARK MISSILE INTERCEPTED': '斯塔克导弹已拦截', 'EMERGENCY LAUNCH': '紧急发射', 'RETURN TO START POINT': '回出生点', 'REPAIR': '维修', 'REPAIRING': '正在维修', 'HOLD POSITION': '原地别动 5 秒', 'SUIT REPAIRED': '战衣已修复', 'STARK MISSILE LAUNCHED': '斯塔克导弹已发射', 'INTERCEPT IT': '快拦截',
-  'SUPPLY CACHE': '补给点', 'SURRENDERED HOSTILE KILLED': '杀害了投降的敌人', 'TEN RINGS ON HIGH ALERT': '十戒帮全面戒备', 'ARMOR INBOUND': '装甲部队来袭', 'THRUSTERS ONLINE': '推进器启动',
+  'SUPPLY CACHE': '补给点', 'SURRENDERED HOSTILE KILLED': '杀害了投降的敌人', 'TEN RINGS ON HIGH ALERT': '十戒帮全面戒备', 'ARMOR INBOUND': '装甲部队来袭', 'THRUSTERS ONLINE': '推进器启动', 'SUIT FREED': '已脱困',
   'TRANSMISSION CUT': '无线电已切断', 'ULTRON DEFEATED': 'ULTRON 已击败', 'ULTRON': 'ULTRON', 'ULTRON SENTRIES INBOUND': 'ULTRON 哨兵来袭', 'VILLAGE HIT': '村子被击中', 'CIVILIAN CASUALTIES': '平民伤亡',
   'NO SIGNAL IN RANGE': '范围内没有信号', 'FAINT NODE SIGNAL': '微弱的节点信号', 'OBJECTIVE': '任务目标', 'DESTROY 4 CLOAKED JAMMER NODES': '摧毁 4 个隐形干扰节点', 'ROOFTOPS': '在楼顶',
   'LIBERATE GULMIRA': '解放古尔米拉', 'TEN RINGS OCCUPY THE VILLAGE': '十戒帮占领了村子', 'HOSTAGE EXECUTED': '人质被处决', 'HOSTAGE KILLED': '人质被误伤致死', 'COLLATERAL DAMAGE': '误伤',
